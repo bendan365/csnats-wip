@@ -56,7 +56,7 @@ namespace SampleNatsApplication
 
         internal void runSimpleSyncSub()
         {
-            Options opts = new Options();
+            Options opts = Connection.GetDefaultOptions();
             //opts.Url = "nats://localhost:4222";
             System.Console.WriteLine(opts.ToString());
             Connection c = Connection.Connect(opts);
@@ -105,7 +105,7 @@ namespace SampleNatsApplication
 
         public void TestAddRemoveDelegates()
         {
-            Options opts = new Options();
+            Options opts = Connection.GetDefaultOptions();
             opts.Url = "nats://localhost:4222";
             using (Connection c = Connection.Connect(opts))
             {   
@@ -195,7 +195,7 @@ namespace SampleNatsApplication
 
         public void TestOptions()
         {
-            Options opts = new Options();
+            Options opts = Connection.GetDefaultOptions();
             opts.AsyncErrorEventHandler = ErrorHandler;
             opts.Servers = new string[2] {"nats://localhost:4221","nats://localhost:4222"};
             opts.ReconnectedEventHandler = ReconnectedHandler;
@@ -235,7 +235,7 @@ namespace SampleNatsApplication
 
         private void TestReconnect()
         {
-            Options o = new Options();
+            Options o = Connection.GetDefaultOptions();
             o.Servers = new string[2] { "nats://localhost:4222", "nats://localhost:4223" };
             o.ReconnectedEventHandler  = ReconnectedHandler;
             o.AsyncErrorEventHandler   = ErrorHandler;
@@ -304,7 +304,7 @@ namespace SampleNatsApplication
         {
             System.Console.WriteLine("Connecting");
 
-            Options opts = new Options();
+            Options opts = Connection.GetDefaultOptions();
             opts.Timeout = 120000;
             opts.Url = "nats://Colin:BadPassword@localhost:4222";
             using (Connection c = Connection.Connect(opts))

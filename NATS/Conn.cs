@@ -101,7 +101,7 @@ namespace NATS
 
         // NOTE: We aren't using Mutex here to support enterprises using
         // .NET 4.0.
-        object mu = new Object(); 
+        readonly object mu = new Object(); 
 
 
         private Random r = null;
@@ -253,6 +253,17 @@ namespace NATS
                     return client.Connected;
                 }
             }
+
+            internal bool DataAvailable
+            {
+                get
+                {
+                    if (stream == null)
+                        return false;
+
+                    return stream.DataAvailable;
+                }
+            }
         }
 
         private class ConnectInfo
@@ -334,6 +345,17 @@ namespace NATS
             Options opts = new Options();
             opts.Url = url;
             return Connect(opts);
+        }
+
+        /// <summary>
+        /// Connect will attempt to connect to the NATS server.
+        /// The url can contain username/password semantics.
+        /// </summary>
+        /// <param name="url">The url</param>
+        /// <returns>A new connection to the NATS server</returns>
+        public static Options GetDefaultOptions()
+        {
+            return new Options();
         }
 
         /// <summary>
@@ -485,9 +507,6 @@ namespace NATS
         // connection is in place.
         private void createConn()
         {
-            // TODO:  Opts.Timeout checking.
-            //if (Opts.Timeout)
-            //    throw new NATSInvalidParameterException("Invalid timeout:  " + Opts.Timeout);
             currentServer.updateLastAttempt();
 
             conn.open(currentServer);
@@ -581,7 +600,7 @@ namespace NATS
         }
 
         /// <summary>
-        /// Returns the url of the server currently connected.
+        /// Returns the url of the server currently connected, null otherwise.
         /// </summary>
         public string ConnectedURL
         {
@@ -590,7 +609,7 @@ namespace NATS
                 lock (mu)
                 {
                     if (status != ConnState.CONNECTED)
-                        return IC._EMPTY_;
+                        return null;
 
                     return url.OriginalString;
                 }
@@ -1438,15 +1457,16 @@ namespace NATS
                 if (string.IsNullOrWhiteSpace(reply) == false)
                     publishSb.Append(reply + " ");
 
-                publishSb.Append(data.Length);
+                publishSb.Append(msgSize);
                 publishSb.Append(IC._CRLF_);
 
                 writeString(publishSb.ToString());
 
-                if (data != null)
+                if (msgSize > 0)
+                {
                     bw.Write(data, 0, msgSize);
-
-                bw.Write(_CRLF_AS_BYTES, 0, _CRLF_AS_BYTES.Length);
+                    bw.Write(_CRLF_AS_BYTES, 0, _CRLF_AS_BYTES.Length);
+                }
 
                 stats.outMsgs++;
                 stats.outBytes += msgSize;
@@ -1664,7 +1684,7 @@ namespace NATS
         /// <param name="subject">Subject of interest</param>
         /// <param name="queue">Name of the queue group</param>
         /// <returns>A new Subscription</returns>
-        public SyncSubscription QueueSubscribeAsync(string subject, string queue)
+        public SyncSubscription QueueSubscribeSync(string subject, string queue)
         {
             return subscribeSync(subject, queue);
         }
@@ -1679,7 +1699,7 @@ namespace NATS
         /// <param name="queue">Name of the queue group</param>
         /// <param name="handler">Message handler delegate function</param>
         /// <returns>A new Subscription</returns>
-        public AsyncSubscription QueueSubscribeSync(string subject, string queue)
+        public AsyncSubscription QueueSubscribeAsync(string subject, string queue)
         {
             return subscribeAsync(subject, queue);
         }
@@ -1740,6 +1760,9 @@ namespace NATS
             if (pongs == null)
                 return false;
 
+            if (pongs.Count == 0)
+                return false;
+            
             Channel<bool> start = pongs.Dequeue();
             Channel<bool> c = start;
 
@@ -1850,23 +1873,6 @@ namespace NATS
         {
             // 60 second default.
             FlushTimeout((int)Opts.Timeout);
-        }
-
-        /// <summary>
-        /// Buffered returns the number of bytes buffered to be sent to the server.
-        /// </summary>
-        public long Buffered
-        {
-            get
-            {
-                lock (mu)
-                {
-                    if (isClosed())
-                        throw new NATSConnectionClosedException();
-
-                    return bw.Length;
-                }
-            }
         }
 
         // resendSubscriptions will send our subscription state back to the
@@ -2086,7 +2092,6 @@ namespace NATS
             sb.AppendFormat("url={0};", url);
             sb.AppendFormat("info={0};", info);
             sb.AppendFormat("status={0}", status);
-            sb.AppendFormat("buffered={0}", Buffered);
             sb.Append("Subscriptions={");
             foreach (Subscription s in subs.Values)
             {
