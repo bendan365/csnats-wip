@@ -11,7 +11,8 @@ namespace NATS
     /// </summary>
     public class Subscription : IDisposable
     {
-        internal  Object         mu = new Object(); // lock
+        readonly  internal  Object mu = new Object(); // lock
+
         internal  long           sid = 0; // subscriber ID.
         private   long           msgs;
         internal  protected long delivered;
@@ -104,7 +105,7 @@ namespace NATS
         {
             if (mch != null)
             {
-                if (mch.Length >= maxCount)
+                if (mch.Count >= maxCount)
                 {
                     return false;
                 }
@@ -183,7 +184,7 @@ namespace NATS
                     if (this.conn == null)
                         throw new NATSBadSubscriptionException();
 
-                    return mch.Length;
+                    return mch.Count;
                 }
             }
         }

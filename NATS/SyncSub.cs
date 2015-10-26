@@ -24,7 +24,10 @@ namespace NATS
         /// or block until one is available. A timeout can be used to return when no
         /// message has been delivered.
         /// </summary>
-        /// <param name="timeout">The amount of time to wait.  A value less than zero blocks forever.</param>
+        /// <remarks>
+        /// A timeout of 0 will return null immediately if there are no messages.
+        /// </remarks>
+        /// <param name="timeout">Timeout value</param>
         /// <returns></returns>
         public Msg NextMessage(int timeout)
         {
@@ -47,7 +50,7 @@ namespace NATS
                 localMax = this.max;
             }
 
-            if (timeout > 0)
+            if (timeout >= 0)
             {
                 msg = localChannel.get(timeout);
             }

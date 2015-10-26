@@ -41,7 +41,7 @@ namespace NATS
             }
         }
 
-        internal int Length
+        internal int Count
         {
             get
             {
@@ -62,7 +62,12 @@ namespace NATS
                 return item;
             }
 
-            throw new NATSTimeoutException();
+            if (msTimeout > 0)
+            {
+                throw new NATSTimeoutException();
+            }
+
+            return default(T);
         }
 
         internal void close()

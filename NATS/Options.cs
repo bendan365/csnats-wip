@@ -29,7 +29,10 @@ namespace NATS
 
         int maxPingsOut = Defaults.MaxPingOut;
 
-        internal int subChanLen = 4;
+        internal int subChanLen = 40000;
+
+        // Options can only be created through Connection.GetDefaultOptions();
+        internal Options() { }
 
         /// <summary>
         /// Gets or sets the url used to connect to the NATs server.  This may
@@ -142,7 +145,16 @@ namespace NATS
         public int Timeout
         {
             get { return this.timeout; }
-            set { this.timeout = value; }
+            set
+            {
+                if (value < 0)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        "Timeout must be zero or greater.");
+                }
+
+                this.timeout = value;
+            }
         }
 
         /// <summary>
