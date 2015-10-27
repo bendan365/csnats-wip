@@ -1,9 +1,9 @@
 ﻿using System;
 
-namespace NATS
+namespace NATS.Client
 {
     // Tracks individual backend servers.
-    class Srv
+    internal class Srv
     {
         internal Uri url = null;
         internal bool didConnect = false;

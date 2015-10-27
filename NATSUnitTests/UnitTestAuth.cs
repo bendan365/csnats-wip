@@ -1,6 +1,6 @@
 ﻿using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NATS;
+using NATS.Client;
 
 namespace NATSUnitTests
 {
@@ -19,10 +19,10 @@ namespace NATSUnitTests
                 System.Console.WriteLine("Trying: " + url);
 
                 hitDisconnect = 0;
-                Options opts = Connection.GetDefaultOptions();
+                Options opts = ConnectionFactory.GetDefaultOptions();
                 opts.Url = url;
                 opts.DisconnectedEventHandler += handleDisconnect;
-                Connection c = Connection.Connect(url);
+                Connection c = new ConnectionFactory().Connect(url);
 
                 Assert.Fail("Expected a failure; did not receive one");
                 
@@ -48,7 +48,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestAuthSuccess()
         {
-            Connection c = Connection.Connect("nats://username:password@localhost:8232");
+            Connection c = new ConnectionFactory().Connect("nats://username:password@localhost:8232");
             c.Close();
         }
 

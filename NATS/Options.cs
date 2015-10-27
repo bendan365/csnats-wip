@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Text;
 
-namespace NATS
+namespace NATS.Client
 {
     /// <summary>
     /// This class is used to setup all NATs client options.
@@ -31,7 +31,7 @@ namespace NATS
 
         internal int subChanLen = 40000;
 
-        // Options can only be created through Connection.GetDefaultOptions();
+        // Options can only be created through ConnectionFactory.GetDefaultOptions();
         internal Options() { }
 
         /// <summary>

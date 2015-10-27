@@ -3,7 +3,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using NATS;
+using NATS.Client;
 
 namespace NATSUnitTests
 {
@@ -16,7 +16,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestConnectedServer()
         {
-            Connection c = Connection.Connect();
+            Connection c = new ConnectionFactory().Connect();
            
             string u = c.ConnectedURL;
             
@@ -36,7 +36,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestMultipleClose()
         {
-            Connection c = Connection.Connect();
+            Connection c = new ConnectionFactory().Connect();
             
             Task[] tasks = new Task[10];
 
@@ -53,7 +53,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestBadOptionTimeoutConnect()
         {
-            Options opts = Connection.GetDefaultOptions();
+            Options opts = ConnectionFactory.GetDefaultOptions();
 
             try
             {
@@ -67,7 +67,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSimplePublish()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
                 c.Publish("foo", Encoding.UTF8.GetBytes("Hello World!"));
             }
@@ -76,8 +76,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSimplePublishNoData()
         {
-
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
                 c.Publish("foo", null);
             }
@@ -121,23 +120,24 @@ namespace NATSUnitTests
 
         readonly byte[] omsg = Encoding.UTF8.GetBytes("Hello World");
         readonly object mu = new Object();
-        Subscription asyncSub = null;
+        IAsyncSubscription asyncSub = null;
         Boolean received = false;
 
         [TestMethod]
         public void TestAsyncSubscribe()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
-                using (AsyncSubscription s = c.SubscribeAsync("foo"))
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
-                    s.MessageHandler += MessageHandler;
+                    asyncSub = s;
+                    s.MessageHandler += CheckRecveivedAndValidHandler;
                     s.Start();
-
-                    c.Publish("foo", omsg);
 
                     lock (mu)
                     {
+                        received = false;
+                        c.Publish("foo", omsg);
                         Monitor.Wait(mu, 1000);
                     }
 
@@ -147,10 +147,8 @@ namespace NATSUnitTests
             }
         }
 
-        private void MessageHandler(object sender, MsgHandlerEventArgs args)
+        private void CheckRecveivedAndValidHandler(object sender, MsgHandlerEventArgs args)
         {
-            received = true;
-
             System.Console.WriteLine("Received msg.");
 
             if (compare(args.Message.Data, omsg) == false)
@@ -161,6 +159,7 @@ namespace NATSUnitTests
 
             lock (mu)
             {
+                received = true;
                 Monitor.Pulse(mu);
             }
         }
@@ -168,9 +167,9 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSyncSubscribe()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
-                using (SyncSubscription s = c.SubscribeSync("foo"))
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
                     c.Publish("foo", omsg);
                     Msg m = s.NextMessage(1000);
@@ -183,9 +182,9 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestPubWithReply()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
-                using (SyncSubscription s = c.SubscribeSync("foo"))
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
                     c.Publish("foo", "reply", omsg);
                     Msg m = s.NextMessage(1000);
@@ -198,9 +197,9 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestFlush()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
-                using (SyncSubscription s = c.SubscribeSync("foo"))
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
                     c.Publish("foo", "reply", omsg);
                     c.Flush();
@@ -211,10 +210,10 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestQueueSubscriber()
         {
-            using (Connection c = Connection.Connect())
+            using (Connection c = new ConnectionFactory().Connect())
             {
-                using (SyncSubscription s1 = c.QueueSubscribeSync("foo", "bar"),
-                                        s2 = c.QueueSubscribeSync("foo", "bar"))
+                using (ISyncSubscription s1 = c.QueueSubscribeSync("foo", "bar"),
+                                         s2 = c.QueueSubscribeSync("foo", "bar"))
                 {
                     c.Publish("foo", omsg);
                     c.Flush();
@@ -222,14 +221,11 @@ namespace NATSUnitTests
                         Assert.Fail("Invalid message count in queue.");
 
                     // Drain the messages.
-                    try { s1.NextMessage(1000); }
+                    try { s1.NextMessage(100); }
                     catch (NATSTimeoutException) { }
 
-                    try { s2.NextMessage(1000); }
+                    try { s2.NextMessage(100); }
                     catch (NATSTimeoutException) { }
-
-                    c.Publish("foo", omsg);
-                    c.Flush();
 
                     int total = 1000;
 
@@ -248,7 +244,7 @@ namespace NATSUnitTests
                             (r1 + r2), total);
                     }
 
-                    if (Math.Abs(r1 - r2) < total * .15)
+                    if (Math.Abs(r1 - r2) > (total * .15))
                     {
                         Assert.Fail("Too much variance between {0} and {1}",
                             r1, r2);
@@ -256,228 +252,318 @@ namespace NATSUnitTests
                 }
             }
         }
-    }
-}
+
+        [TestMethod]
+        public void TestReplyArg()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
+                {
+                    s.MessageHandler += ExpectedReplyHandler;
+                    s.Start();
+
+                    lock(mu)
+                    {
+                        received = false;
+                        c.Publish("foo", "bar", null);
+                        Monitor.Wait(mu, 1000);
+                    }
+                }
+            }
+
+            if (!received)
+                Assert.Fail("Message not received.");
+        }
+
+        private void ExpectedReplyHandler(object sender, MsgHandlerEventArgs args)
+        {
+            if ("bar".Equals(args.Message.Reply) == false)
+                Assert.Fail("Expected \"bar\", received: " + args.Message);
+
+            lock(mu)
+            {
+                received = true;
+                Monitor.Pulse(mu);
+            }
+        }
+
+        [TestMethod]
+        public void TestSyncReplyArg()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
+                {
+                    c.Publish("foo", "bar", null);
+                    c.FlushTimeout(30000);
+
+                    Msg m = s.NextMessage(1000);
+                    if ("bar".Equals(m.Reply) == false)
+                        Assert.Fail("Expected \"bar\", received: " + m);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestUnsubscribe()
+        {
+            int count = 0;
+            int max = 20;
+
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
+                {
+                    asyncSub = s;
+                    //s.MessageHandler += UnsubscribeAfterCount;
+                    s.MessageHandler += (sender, args) =>
+                    {
+                        if (++count == max)
+                        {
+                            asyncSub.Unsubscribe();
+                            lock (mu)
+                            {
+                                Monitor.Pulse(mu);
+                            }
+                        }
+                    };
+                    s.Start();
+
+                    max = 20;
+                    for (int i = 0; i < max; i++)
+                    {
+                        c.Publish("foo", null, null);
+                    }
+
+                    lock (mu)
+                    {
+                        Monitor.Wait(mu, 2000);
+                    }
+                }
+
+                if (count != max)
+                    Assert.Fail("Received wrong # of messages after unsubscribe: {0} vs {1}", count, max);
+            }
+        }
+
+        [TestMethod]
+        public void TestDoubleUnsubscribe()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
+                {
+                    s.Unsubscribe();
+
+                    try
+                    {
+                        s.Unsubscribe();
+                        Assert.Fail("No Exception thrown.");
+                    }
+                    catch (Exception e)
+                    {
+                        System.Console.WriteLine("Expected exception {0}: {1}",
+                            e.GetType(), e.Message);
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestRequestTimeout()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                try
+                {
+                    c.Request("foo", null, 500);
+                    Assert.Fail("Expected an exception.");
+                }
+                catch (NATSTimeoutException e) 
+                {
+                    Console.WriteLine("Received expected exception.");
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestRequest()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
+                {
+                    byte[] response = Encoding.UTF8.GetBytes("I will help you.");
+
+                    s.MessageHandler += (sender, args) =>
+                    {
+                        c.Publish(args.Message.Reply, response);
+                    };
+
+                    s.Start();
+
+                    Msg m = c.Request("foo", Encoding.UTF8.GetBytes("help."),
+                        5000);
+
+                    if (!compare(m.Data, response))
+                    {
+                        Assert.Fail("Response isn't valid");
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestRequestNoBody()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
+                {
+                    byte[] response = Encoding.UTF8.GetBytes("I will help you.");
+
+                    s.MessageHandler += (sender, args) =>
+                    {
+                        c.Publish(args.Message.Reply, response);
+                    };
+
+                    s.Start();
+
+                    Msg m = c.Request("foo", null, 5000);
+
+                    if (!compare(m.Data, response))
+                    {
+                        Assert.Fail("Response isn't valid");
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestFlushInHandler()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
+                {
+                    byte[] response = Encoding.UTF8.GetBytes("I will help you.");
+
+                    s.MessageHandler += (sender, args) =>
+                    {
+                        try
+                        {
+                            c.Flush();
+                            System.Console.WriteLine("Success.");
+                        }
+                        catch (Exception e)
+                        {
+                            Assert.Fail("Unexpected exception: " + e);
+                        }
+
+                        lock (mu)
+                        {
+                            Monitor.Pulse(mu);
+                        }
+                    };
+
+                    s.Start();
+
+                    lock (mu)
+                    {
+                        c.Publish("foo", Encoding.UTF8.GetBytes("Hello"));
+                        Monitor.Wait(mu);
+                    }
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestReleaseFlush()
+        {
+            Connection c = new ConnectionFactory().Connect();
+
+            for (int i = 0; i < 1000; i++)
+            {
+                c.Publish("foo", Encoding.UTF8.GetBytes("Hello"));
+            }
+
+            Task.Run(() => { c.Close(); });
+            c.Flush();
+        }
+
+        [TestMethod]
+        public void TestCloseAndDispose()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                c.Close();
+            }
+        }
+
+        [TestMethod]
+        public void TestInbox()
+        {
+            using (Connection c = new ConnectionFactory().Connect())
+            {
+                string inbox = c.NewInbox();
+                if (string.IsNullOrWhiteSpace(inbox))
+                {
+                    Assert.Fail("Empty inbox.");
+                    return;
+                }
+
+                if (inbox.StartsWith("_INBOX.") == false)
+                {
+                    Assert.Fail("Invalid Inbox: " + inbox);
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestStats()
+        {
+            Connection c = new ConnectionFactory().Connect();
+
+            byte[] data = Encoding.UTF8.GetBytes("The quick brown fox jumped over the lazy dog");
+            int iter = 10;
+
+            for (int i = 0; i < iter; i++)
+            {
+                c.Publish("foo", data);
+            }
+
+            IStatistics stats = c.Stats;
+            Assert.AreEqual(stats.OutMsgs, iter);
+            Assert.AreEqual(stats.OutBytes, iter * data.Length);
+            
+            c.ResetStats();
+
+            // Test both sync and async versions of subscribe.
+            IAsyncSubscription s1 = c.SubscribeAsync("foo");
+            s1.MessageHandler += (sender, arg) => { };
+            s1.Start();
+
+            ISyncSubscription s2 = c.SubscribeSync("foo");
+
+            for (int i = 0; i < iter; i++)
+            {
+                c.Publish("foo", data);
+            }
+            c.Flush();
+
+            stats = c.Stats;
+            Assert.AreEqual(stats.InMsgs, 2* iter);
+            Assert.AreEqual(stats.OutBytes, 2* iter * data.Length);
+
+            c.Close();
+        }
+
+    } // class
+} // namespace
 
 
 #if sldkfjdslkfj
-
-func TestQueueSubscriber(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	s1, _ := nc.QueueSubscribeSync("foo", "bar")
-	s2, _ := nc.QueueSubscribeSync("foo", "bar")
-	omsg := []byte("Hello World")
-	nc.Publish("foo", omsg)
-	nc.Flush()
-	r1, _ := s1.QueuedMsgs()
-	r2, _ := s2.QueuedMsgs()
-	if (r1 + r2) != 1 {
-		t.Fatal("Received too many messages for multiple queue subscribers")
-	}
-	// Drain messages
-	s1.NextMsg(time.Second)
-	s2.NextMsg(time.Second)
-
-	total := 1000
-	for i := 0; i < total; i++ {
-		nc.Publish("foo", omsg)
-	}
-	nc.Flush()
-	v := uint(float32(total) * 0.15)
-	r1, _ = s1.QueuedMsgs()
-	r2, _ = s2.QueuedMsgs()
-	if r1+r2 != total {
-		t.Fatalf("Incorrect number of messages: %d vs %d", (r1 + r2), total)
-	}
-	expected := total / 2
-	d1 := uint(math.Abs(float64(expected - r1)))
-	d2 := uint(math.Abs(float64(expected - r2)))
-	if d1 > v || d2 > v {
-		t.Fatalf("Too much variance in totals: %d, %d > %d", d1, d2, v)
-	}
-}
-
-func TestReplyArg(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	ch := make(chan bool)
-	replyExpected := "bar"
-
-	nc.Subscribe("foo", func(m *nats.Msg) {
-		if m.Reply != replyExpected {
-			t.Fatalf("Did not receive correct reply arg in callback: "+
-				"('%s' vs '%s')", m.Reply, replyExpected)
-		}
-		ch <- true
-	})
-	nc.PublishMsg(&nats.Msg{Subject: "foo", Reply: replyExpected, Data: []byte("Hello")})
-	if e := Wait(ch); e != nil {
-		t.Fatal("Did not receive callback")
-	}
-}
-
-func TestSyncReplyArg(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	replyExpected := "bar"
-	sub, _ := nc.SubscribeSync("foo")
-	nc.PublishMsg(&nats.Msg{Subject: "foo", Reply: replyExpected, Data: []byte("Hello")})
-	msg, err := sub.NextMsg(1 * time.Second)
-	if err != nil {
-		t.Fatal("Received an err on NextMsg()")
-	}
-	if msg.Reply != replyExpected {
-		t.Fatalf("Did not receive correct reply arg in callback: "+
-			"('%s' vs '%s')", msg.Reply, replyExpected)
-	}
-}
-
-func TestUnsubscribe(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	received := int32(0)
-	max := int32(10)
-	ch := make(chan bool)
-	nc.Subscribe("foo", func(m *nats.Msg) {
-		atomic.AddInt32(&received, 1)
-		if received == max {
-			err := m.Sub.Unsubscribe()
-			if err != nil {
-				t.Fatal("Unsubscribe failed with err:", err)
-			}
-			ch <- true
-		}
-	})
-	send := 20
-	for i := 0; i < send; i++ {
-		nc.Publish("foo", []byte("hello"))
-	}
-	nc.Flush()
-	<-ch
-
-	r := atomic.LoadInt32(&received)
-	if r != max {
-		t.Fatalf("Received wrong # of messages after unsubscribe: %d vs %d",
-			r, max)
-	}
-}
-
-func TestDoubleUnsubscribe(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	sub, err := nc.SubscribeSync("foo")
-	if err != nil {
-		t.Fatal("Failed to subscribe: ", err)
-	}
-	if err = sub.Unsubscribe(); err != nil {
-		t.Fatal("Unsubscribe failed with err:", err)
-	}
-	if err = sub.Unsubscribe(); err == nil {
-		t.Fatal("Unsubscribe should have reported an error")
-	}
-}
-
-func TestRequestTimeout(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	if _, err := nc.Request("foo", []byte("help"), 10*time.Millisecond); err == nil {
-		t.Fatalf("Expected to receive a timeout error")
-	}
-}
-
-func TestRequest(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	response := []byte("I will help you")
-	nc.Subscribe("foo", func(m *nats.Msg) {
-		nc.Publish(m.Reply, response)
-	})
-	msg, err := nc.Request("foo", []byte("help"), 50*time.Millisecond)
-	if err != nil {
-		t.Fatalf("Received an error on Request test: %s", err)
-	}
-	if !bytes.Equal(msg.Data, response) {
-		t.Fatalf("Received invalid response")
-	}
-}
-
-func TestRequestNoBody(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	response := []byte("I will help you")
-	nc.Subscribe("foo", func(m *nats.Msg) {
-		nc.Publish(m.Reply, response)
-	})
-	msg, err := nc.Request("foo", nil, 50*time.Millisecond)
-	if err != nil {
-		t.Fatalf("Received an error on Request test: %s", err)
-	}
-	if !bytes.Equal(msg.Data, response) {
-		t.Fatalf("Received invalid response")
-	}
-}
-
-func TestFlushInCB(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-	defer nc.Close()
-
-	ch := make(chan bool)
-
-	nc.Subscribe("foo", func(_ *nats.Msg) {
-		nc.Flush()
-		ch <- true
-	})
-	nc.Publish("foo", []byte("Hello"))
-	if e := Wait(ch); e != nil {
-		t.Fatal("Flush did not return properly in callback")
-	}
-}
-
-func TestReleaseFlush(t *testing.T) {
-	s := RunDefaultServer()
-	defer s.Shutdown()
-	nc := NewDefaultConnection(t)
-
-	for i := 0; i < 1000; i++ {
-		nc.Publish("foo", []byte("Hello"))
-	}
-	go nc.Close()
-	nc.Flush()
-}
-
-func TestInbox(t *testing.T) {
-	inbox := nats.NewInbox()
-	if matched, _ := regexp.Match(`_INBOX.\S`, []byte(inbox)); !matched {
-		t.Fatal("Bad INBOX format")
-	}
-}
 
 func TestStats(t *testing.T) {
 	s := RunDefaultServer()

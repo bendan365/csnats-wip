@@ -32,7 +32,7 @@ using System.Threading.Tasks;
 ///     although method location mirrors the go client to faciliate
 ///     maintenance.
 ///     
-namespace NATS
+namespace NATS.Client
 {
     /// <summary>
     /// This class contains default values for fields used throughout NATS.
@@ -87,9 +87,9 @@ namespace NATS
 
     public class ConnEventArgs
     {
-        private NATS.Connection c;   
+        private Connection c;   
             
-        internal ConnEventArgs(NATS.Connection c)
+        internal ConnEventArgs(Connection c)
         {
             this.c = c;
         }
@@ -106,19 +106,19 @@ namespace NATS
         private Subscription s;
         private String err;
 
-        internal ErrEventArgs(NATS.Connection c, NATS.Subscription s, String err)
+        internal ErrEventArgs(Connection c, Subscription s, String err)
         {
             this.c = c;
             this.s = s;
             this.err = err;
         }
 
-        public NATS.Connection Conn
+        public Connection Conn
         {
             get { return c; }
         }
 
-        public NATS.Subscription Subscription
+        public Subscription Subscription
         {
             get { return s; }
         }
@@ -173,7 +173,7 @@ namespace NATS
         /// <summary>
         /// Retrieves the message.
         /// </summary>
-        public NATS.Msg Message
+        public Msg Message
         {
             get { return msg; }
         }

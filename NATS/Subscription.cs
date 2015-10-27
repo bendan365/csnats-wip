@@ -1,15 +1,16 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 
-namespace NATS
+namespace NATS.Client
 {
     // A Subscription represents interest in a given subject.
     /// <summary>
     /// A Subscription object represents interest in a given subject.
     /// A subscription is created and attached to a connection.
     /// </summary>
-    public class Subscription : IDisposable
+    public class Subscription : ISubscription, IDisposable
     {
         readonly  internal  Object mu = new Object(); // lock
 
@@ -23,7 +24,7 @@ namespace NATS
         internal bool       sc   = false;
 
         internal Connection conn = null;
-        internal Channel<NATS.Msg> mch  = new Channel<NATS.Msg>();
+        internal Channel<Msg> mch  = new Channel<Msg>();
 
         // Subject that represents this subscription. This can be different
         // than the received subject inside a Msg if this is a wildcard.
@@ -92,7 +93,7 @@ namespace NATS
         }
 
 
-        protected internal virtual bool processMsg(NATS.Msg msg)
+        protected internal virtual bool processMsg(Msg msg)
         {
             return true;
             // NOOP;
@@ -189,7 +190,7 @@ namespace NATS
             }
         }
 
-        public void Dispose()
+        void IDisposable.Dispose()
         {
             try
             {
@@ -200,6 +201,23 @@ namespace NATS
                 // We we get here with normal usage, for example when
                 // auto unsubscribing, so just this here.
             }
+        }
+
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.Append("{");
+            
+            sb.AppendFormat("Subject={0};Queue={1};" +
+                "QueuedMessageCount={2};IsValid={3};Type={4}",
+                Subject, (Queue == null ? "null" : Queue), 
+                QueuedMessageCount, IsValid, 
+                this.GetType().ToString());
+            
+            sb.Append("}");
+            
+            return sb.ToString();
         }
 
     }  // Subscription

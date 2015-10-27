@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace NATS
+namespace NATS.Client
 {
     // This class mirrors GO channel functionality - it's basically a
     // a threadsafe blocking queue.

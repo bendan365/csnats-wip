@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
      
-namespace NATS
+namespace NATS.Client
 {
     internal sealed class MsgArg
     {
@@ -20,7 +20,7 @@ namespace NATS
     internal sealed class Parser
     {
 
-        NATS.Connection conn;
+        Connection conn;
         MemoryStream argBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
         MemoryStream msgBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
 
@@ -29,7 +29,7 @@ namespace NATS
 
         //internal const int MSG_PAYLOAD = 23;
 
-        internal Parser(NATS.Connection conn)
+        internal Parser(Connection conn)
         {
             this.conn = conn;
         }

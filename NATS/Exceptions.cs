@@ -8,7 +8,7 @@ using System.Threading;
 using System.IO;
 
 
-namespace NATS
+namespace NATS.Client
 {
     public class NATSException : Exception
     {

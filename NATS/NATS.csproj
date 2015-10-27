@@ -41,6 +41,12 @@
   <ItemGroup>
     <Compile Include="Channel.cs" />
     <Compile Include="AsyncSub.cs" />
+    <Compile Include="ConnectionFactory.cs" />
+    <Compile Include="IAsyncSubscription.cs" />
+    <Compile Include="IConnection.cs" />
+    <Compile Include="IStatistics.cs" />
+    <Compile Include="ISubscription.cs" />
+    <Compile Include="ISyncSubscription.cs" />
     <Compile Include="SyncSub.cs" />
     <Compile Include="Subscription.cs" />
     <Compile Include="Msg.cs" />
