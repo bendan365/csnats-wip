@@ -1,10 +1,9 @@
 ﻿using System;
 
-namespace NATS
+namespace NATS.Client
 {
-    // Tracks various stats received and sent on this connection,
-    // including counts for messages and bytes.
-    public class Statistics
+
+    public class Statistics : IStatistics
     {
         internal Statistics() { }
 
@@ -29,6 +28,7 @@ namespace NATS
         }
 
         internal long inBytes = 0;
+
         /// <summary>
         /// Gets the number of incoming bytes.
         /// </summary>
@@ -67,6 +67,14 @@ namespace NATS
             s.outBytes = obj.outBytes;
             s.outMsgs = obj.outMsgs;
             s.reconnects = obj.reconnects;
+        }
+
+        internal void clear()
+        {
+            this.inBytes  = 0;
+            this.inMsgs   = 0;
+            this.outBytes = 0;
+            this.outMsgs  = 0;
         }
     }
 

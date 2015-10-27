@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 
-namespace NATS
+namespace NATS.Client
 {
     /// <summary>
     /// State of the connection.
@@ -95,7 +95,7 @@ namespace NATS
     /// <summary>
     /// Represents the connection to the server.
     /// </summary>
-    public class Connection : IDisposable
+    public class Connection : IConnection, IDisposable
     {
         Statistics stats = new Statistics();
 
@@ -137,9 +137,9 @@ namespace NATS
         private Channel<Msg>         mch   = new Channel<Msg>(Defaults.flushChanSize);
         private Queue<Channel<bool>> pongs = new Queue<Channel<bool>>();
 
-        internal NATS.MsgArg msgArgs = new MsgArg();
+        internal MsgArg   msgArgs = new MsgArg();
 
-        ConnState status = ConnState.CLOSED;
+        internal ConnState status = ConnState.CLOSED;
 
         // TODO - look at error handling, hold on to the last Ex where
         // the go client holds on to err.
@@ -162,6 +162,40 @@ namespace NATS
         StringBuilder publishSb = new StringBuilder(Defaults.scratchSize);
 
         TCPConnection conn = new TCPConnection();
+
+
+        internal class Control
+        {
+            // for efficiency, assign these once in the contructor;
+            internal string op;
+            internal string args;
+
+            static readonly internal char[] seperator = { ' ' };
+
+            // ensure this object is always created with a string.
+            private Control() { }
+
+            internal Control(string s)
+            {
+                string[] parts = s.Split(seperator, 2);
+
+                if (parts.Length == 1)
+                {
+                    op = parts[0].Trim();
+                    args = IC._EMPTY_;
+                }
+                if (parts.Length == 2)
+                {
+                    op = parts[0].Trim();
+                    args = parts[1].Trim();
+                }
+                else
+                {
+                    op = IC._EMPTY_;
+                    args = IC._EMPTY_;
+                }
+            }
+        }
 
         /// <summary>
         /// Convenience class representing the TCP connection to prevent 
@@ -334,82 +368,20 @@ namespace NATS
             this.pongProtoBytesLen = pongProtoBytes.Length;
         }
 
-        /// <summary>
-        /// Connect will attempt to connect to the NATS server.
-        /// The url can contain username/password semantics.
-        /// </summary>
-        /// <param name="url">The url</param>
-        /// <returns>A new connection to the NATS server</returns>
-        public static Connection Connect(string url)
-        {
-            Options opts = new Options();
-            opts.Url = url;
-            return Connect(opts);
-        }
 
-        /// <summary>
-        /// Connect will attempt to connect to the NATS server.
-        /// The url can contain username/password semantics.
-        /// </summary>
-        /// <param name="url">The url</param>
-        /// <returns>A new connection to the NATS server</returns>
-        public static Options GetDefaultOptions()
-        {
-            return new Options();
-        }
-
-        /// <summary>
-        /// SecureConnect will attempt to connect to the NATS server using TLS.
-        //. The url can contain username/password semantics.
-        /// </summary>
-        /// <param name="url">connect url</param>
-        /// <returns>A new connection to the NATS server</returns>
-        public static NATS.Connection SecureConnect(string url)
-        {
-            Options opts = new Options();
-            opts.Url = url;
-            opts.Secure = true;
-            return Connect(opts);
-        }
-
-        /// <summary>
-        /// Connect to the NATs server using default options.
-        /// </summary>
-        /// <returns>A new connection to the NATS server</returns>
-        public static NATS.Connection Connect()
-        {
-            return Connect(new Options());
-        }
-
-        /// <summary>
-        /// Connect to the NATs server using the provided options.
-        /// </summary>
-        /// <param name="opts">NATs client options</param>
-        /// <returns>A new connection to the NATS server</returns>
-        public static NATS.Connection Connect(Options opts)
-        {
-            NATS.Connection nc = new Connection(opts);
-            nc.setupServerPool();
-            nc.connect();
-            return nc;
-        }
-
-        /// <summary>
         /// Return bool indicating if we have more servers to try to establish
         /// a connection.
-        /// </summary>
-        /// <returns>True if more servers are available, false otherwise.</returns>
-        private bool IsServerAvailable()
+        private bool isServerAvailable()
         {
             return (srvPool.Count > 0);
         }
 
         // Return the currently selected server
-        private NATS.Srv currentServer
+        private Srv currentServer
         {
             get
             {
-                if (!IsServerAvailable())
+                if (!isServerAvailable())
                     return null;
 
                 foreach (Srv s in srvPool)
@@ -450,7 +422,7 @@ namespace NATS
         {
             this.url = null;
 
-            if (!IsServerAvailable())
+            if (!isServerAvailable())
                 throw new NATSNoServersException("Unable to choose server; no servers available.");
 
             this.url = srvPool.First().url;
@@ -599,9 +571,6 @@ namespace NATS
             }
         }
 
-        /// <summary>
-        /// Returns the url of the server currently connected, null otherwise.
-        /// </summary>
         public string ConnectedURL
         {
             get
@@ -656,8 +625,9 @@ namespace NATS
             sendConnect();
         }
 
-        private void connect()
+        internal void connect()
         {
+            setupServerPool();
             // Create actual socket connection
             // For first connect we walk all servers in the pool and try
             // to connect immediately.
@@ -728,40 +698,6 @@ namespace NATS
             if (Opts.Secure)
             {
                 makeTLSConn();
-            }
-        }
-
-        // TODO:  Move this:
-        internal class Control
-        {
-            // for efficiency, assign these once in the contructor;
-            internal string op;
-            internal string args;
-
-            static readonly internal char[] seperator = { ' ' };
-
-            // ensure this object is always created with a string.
-            private Control() { }
-
-            internal Control(string s)
-            {
-                string[] parts = s.Split(seperator, 2);
-
-                if (parts.Length == 1)
-                {
-                    op = parts[0].Trim();
-                    args = IC._EMPTY_;
-                }
-                if (parts.Length == 2)
-                {
-                    op = parts[0].Trim();
-                    args = parts[1].Trim();
-                }
-                else
-                {
-                    op = IC._EMPTY_;
-                    args = IC._EMPTY_;
-                }
             }
         }
 
@@ -1213,9 +1149,9 @@ namespace NATS
                     throw new NATSException("Unable to parse message arguments: " + s);
             }
 
-            if (msgArgs.size <= 0)
+            if (msgArgs.size < 0)
             {
-                throw new NATSException("Invalid Message - Bad or Missing Size: '%s': " + s);
+                throw new NATSException("Invalid Message - Bad or Missing Size: " + s);
             }
         }
 
@@ -1414,13 +1350,6 @@ namespace NATS
                 fch.add(true);
         }
 
-
-        // Include for using directive.
-        public void Dispose()
-        {
-            Close();
-        }
-
         // publish is the internal function to publish messages to a nats-server.
         // Sends a protocol data message by queueing into the bufio writer
         // and kicking the flush go routine. These writes should be protected.
@@ -1465,8 +1394,9 @@ namespace NATS
                 if (msgSize > 0)
                 {
                     bw.Write(data, 0, msgSize);
-                    bw.Write(_CRLF_AS_BYTES, 0, _CRLF_AS_BYTES.Length);
                 }
+
+                bw.Write(_CRLF_AS_BYTES, 0, _CRLF_AS_BYTES.Length);
 
                 stats.outMsgs++;
                 stats.outBytes += msgSize;
@@ -1476,52 +1406,21 @@ namespace NATS
 
         } // publish
 
-        /// <summary>
-        /// Publish publishes the data argument to the given subject. The data
-        /// argument is left untouched and needs to be correctly interpreted on
-        /// the receiver.
-        /// </summary>
-        /// <param name="subject">Subject to publish the message to.</param>
-        /// <param name="data">Message payload</param>
         public void Publish(string subject, byte[] data)
         {
             publish(subject, null, data);
         }
 
-        /// <summary>
-        /// Publishes the Msg structure, which includes the
-        /// Subject, an optional Reply and an optional Data field.
-        /// </summary>
-        /// <param name="msg">The message to send.</param>
         public void Publish(Msg msg)
         {
             publish(msg.Subject, msg.Reply, msg.Data);
         }
 
-        /// <summary>
-        /// Publish will perform a Publish() excpecting a response on the
-        /// reply subject. Use Request() for automatically waiting for a response
-        /// inline.
-        /// </summary>
-        /// <param name="subject">Subject to publish on</param>
-        /// <param name="reply">Subject the receiver will on.</param>
-        /// <param name="data">The message payload</param>
         public void Publish(string subject, string reply, byte[] data)
         {
             publish(subject, reply, data);
         }
 
-        /// <summary>
-        /// Request will create an Inbox and perform a Request() call
-        /// with the Inbox reply and return the first reply received.
-        /// This is optimized for the case of multiple responses.
-        /// </summary>
-        /// <remarks>
-        /// A negative timeout blocks forever, zero is not allowed.
-        /// </remarks>
-        /// <param name="subject">Subject to send the request on.</param>
-        /// <param name="data">payload of the message</param>
-        /// <param name="timeout">time to block</param>
         public Msg Request(string subject, byte[] data, int timeout)
         {
             Msg m = null;
@@ -1549,27 +1448,11 @@ namespace NATS
             return m;
         }
 
-        /// <summary>
-        /// Request will create an Inbox and perform a Request() call
-        /// with the Inbox reply and return the first reply received.
-        /// This is optimized for the case of multiple responses.
-        /// </summary>
-        /// <param name="subject">Subject to send the request on.</param>
-        /// <param name="data">payload of the message</param>
-        /// <param name="timeout">timeout.</param>
         public Msg Request(string subject, byte[] data)
         {
             return Request(subject, data, -1);
         }
 
-
-
-        /// <summary>
-        /// NewInbox will return an inbox string which can be used for directed replies from
-        /// subscribers. These are guaranteed to be unique, but can be shared and subscribed
-        /// to by others.
-        /// </summary>
-        /// <returns>A string representing an inbox.</returns>
         public string NewInbox()
         {
             if (r == null)
@@ -1648,58 +1531,22 @@ namespace NATS
             return s;
         }
 
-        /// <summary>
-        /// Subscribe will create a subscriber with interest in a given subject.
-        /// The subject can have wildcards (partial:*, full:>). Messages will be delivered
-        /// to the associated MsgHandler. If no MsgHandler is set, the
-        /// subscription is a synchronous subscription and can be polled via
-        /// Subscription.NextMsg().  Subscriber message handler delegates
-        /// can be added or removed anytime.
-        /// </summary>
-        /// <param name="subject">Subject of interest.</param>
-        /// <returns>A new Subscription</returns>
-        public SyncSubscription SubscribeSync(string subject)
+        public ISyncSubscription SubscribeSync(string subject)
         {
             return subscribeSync(subject, null);
         }
 
-        /// <summary>
-        /// SubscribeAsynchronously will create an AsynchSubscriber with
-        /// interest in a given subject.
-        /// </summary>
-        /// <param name="subject">Subject of interest.</param>
-        /// <param name="handler">Message handler delegate function</param>
-        /// <returns>A new Subscription</returns>
-        public AsyncSubscription SubscribeAsync(string subject)
+        public IAsyncSubscription SubscribeAsync(string subject)
         {
             return subscribeAsync(subject, null);
         }
 
-        /// <summary>
-        /// Creates a synchronous queue subscriber on the given
-        /// subject. All subscribers with the same queue name will form the queue
-        /// group and only one member of the group will be selected to receive any
-        /// given message synchronously.
-        /// </summary>
-        /// <param name="subject">Subject of interest</param>
-        /// <param name="queue">Name of the queue group</param>
-        /// <returns>A new Subscription</returns>
-        public SyncSubscription QueueSubscribeSync(string subject, string queue)
+        public ISyncSubscription QueueSubscribeSync(string subject, string queue)
         {
             return subscribeSync(subject, queue);
         }
 
-        /// <summary>
-        /// QueueSubscribe creates an asynchronous queue subscriber on the given subject.
-        /// All subscribers with the same queue name will form the queue group and
-        /// only one member of the group will be selected to receive any given
-        /// message asynchronously.
-        /// </summary>
-        /// <param name="subject">Subject of interest</param>
-        /// <param name="queue">Name of the queue group</param>
-        /// <param name="handler">Message handler delegate function</param>
-        /// <returns>A new Subscription</returns>
-        public AsyncSubscription QueueSubscribeAsync(string subject, string queue)
+        public IAsyncSubscription QueueSubscribeAsync(string subject, string queue)
         {
             return subscribeAsync(subject, queue);
         }
@@ -1823,11 +1670,6 @@ namespace NATS
             processOpError(new NATSStaleConnectionException());
         }
 
-        /// <summary>
-        /// Flush will perform a round trip to the server and return when it
-        /// receives the internal reply.
-        /// </summary>
-        /// <param name="timeout">The timeout in milliseconds.</param>
         public void FlushTimeout(int timeout)
         {
             if (timeout <= 0)
@@ -1969,7 +1811,7 @@ namespace NATS
 
                 // Go ahead and make sure we have flushed the outbound buffer.
                 status = ConnState.CLOSED;
-                if (conn.isSetup() == false)
+                if (conn.isSetup())
                 {
                     bw.Flush();
                     conn.teardown();
@@ -1989,10 +1831,6 @@ namespace NATS
             }
         }
 
-        /// <summary>
-        /// Close will close the connection to the server. This call will release
-        /// all blocking calls, such as Flush() and NextMsg().
-        /// </summary>
         public void Close()
         {
             close(ConnState.CLOSED, true);
@@ -2004,10 +1842,6 @@ namespace NATS
             return (status == ConnState.CLOSED);
         }
 
-        /// <summary>
-        /// Test if this connection has been closed.
-        /// </summary>
-        /// <returns>true if closed, false otherwise.</returns>
         public bool IsClosed()
         {
             lock (mu)
@@ -2016,10 +1850,6 @@ namespace NATS
             }
         }
 
-        /// <summary>
-        /// Test if this connection is reconnecting.
-        /// </summary>
-        /// <returns>true if reconnecting, false otherwise.</returns>
         public bool IsReconnecting()
         {
             lock (mu)
@@ -2028,9 +1858,6 @@ namespace NATS
             }
         }
 
-        /// <summary>
-        /// Gets the current state of the connection.
-        /// </summary>
         public ConnState State
         {
             get
@@ -2056,11 +1883,7 @@ namespace NATS
             return (status == ConnState.CONNECTING || status == ConnState.CONNECTED);
         }
 
-        // Stats will return a race safe copy of connection statistics.Statistics section for the connection.
-        /// <summary>
-        /// Returns a race safe copy of connection statistics.
-        /// </summary>
-        public Statistics Stats
+        public IStatistics Stats
         {
             get
             {
@@ -2071,9 +1894,14 @@ namespace NATS
             }
         }
 
-        /// <summary>
-        /// Returns the server defined size limit that a message payload can have.
-        /// </summary>
+        public void ResetStats()
+        {
+            lock (mu)
+            {
+                this.stats.clear();
+            }
+        }
+
         public long MaxPayload
         {
             get
@@ -2102,6 +1930,17 @@ namespace NATS
             return sb.ToString();
         }
 
+        void IDisposable.Dispose()
+        {
+            try
+            {
+                Close();
+            }
+            catch (Exception)
+            {
+                // No need to throw an exception here
+            }
+        }
     } // class Conn
 
 

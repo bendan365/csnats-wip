@@ -2,9 +2,9 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace NATS
+namespace NATS.Client
 {
-    public sealed class SyncSubscription : Subscription
+    public sealed class SyncSubscription : Subscription, ISyncSubscription, ISubscription 
     {
         internal SyncSubscription(Connection conn, string subject, string queue)
             : base(conn, subject, queue) { }

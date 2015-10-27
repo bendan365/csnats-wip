@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace NATS
+namespace NATS.Client
 {
     /// <summary>
     /// An object of this class is an asynchronous subscription representing interest
@@ -14,17 +14,17 @@ namespace NATS
     /// before message processing begins.
     /// </summary>
     /// <remarks><see cref="MsgHandler">See MsgHandler</see>.</remarks>
-    public sealed class AsyncSubscription : Subscription
+    public sealed class AsyncSubscription : Subscription, IAsyncSubscription, ISubscription
     {
 
-        private NATS.MsgHandler     msgHandler = null;
+        private MsgHandler          msgHandler = null;
         private MsgHandlerEventArgs msgHandlerArgs = new MsgHandlerEventArgs();
         private Task                msgFeeder = null;
 
         internal AsyncSubscription(Connection conn, string subject, string queue)
             : base(conn, subject, queue) { }
 
-        protected internal override bool processMsg(NATS.Msg msg)
+        protected internal override bool processMsg(Msg msg)
         {
             Connection c;
             MsgHandler handler;

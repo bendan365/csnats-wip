@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Text;
 
-namespace NATS
+namespace NATS.Client
 {
     // Msg is a structure used by Subscribers and PublishMsg().
     public sealed class Msg
