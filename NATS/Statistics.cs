@@ -1,5 +1,9 @@
 ﻿using System;
 
+
+// disable XML comment warnings
+#pragma warning disable 1591
+
 namespace NATS.Client
 {
 
@@ -60,13 +64,11 @@ namespace NATS.Client
         // deep copy contructor
         internal Statistics(Statistics obj)
         {
-            Statistics s = new Statistics();
-
-            s.inMsgs = obj.inMsgs;
-            s.inBytes = obj.inBytes;
-            s.outBytes = obj.outBytes;
-            s.outMsgs = obj.outMsgs;
-            s.reconnects = obj.reconnects;
+            this.inMsgs = obj.inMsgs;
+            this.inBytes = obj.inBytes;
+            this.outBytes = obj.outBytes;
+            this.outMsgs = obj.outMsgs;
+            this.reconnects = obj.reconnects;
         }
 
         internal void clear()

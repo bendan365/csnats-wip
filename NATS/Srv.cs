@@ -15,14 +15,7 @@ namespace NATS.Client
 
         internal Srv(String urlString)
         {
-            try
-            {
-                this.url = new Uri(urlString);
-            }
-            catch (Exception e)
-            {
-                throw new NATSException("Invalid URL", e);
-            }
+            this.url = new Uri(urlString);
         }
 
         internal void updateLastAttempt()

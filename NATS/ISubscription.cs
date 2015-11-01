@@ -5,6 +5,9 @@ using System.Text;
 
 namespace NATS.Client
 {
+    /// <summary>
+    /// Represents interest in a NATS topic.
+    /// </summary>
     public interface ISubscription
     {
         /// <summary>

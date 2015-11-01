@@ -12,6 +12,8 @@ namespace NATSUnitTests
     {
         int hitDisconnect;
 
+        UnitTestUtilities util = new UnitTestUtilities();
+
         private void connectAndFail(String url)
         {
             try
@@ -22,7 +24,7 @@ namespace NATSUnitTests
                 Options opts = ConnectionFactory.GetDefaultOptions();
                 opts.Url = url;
                 opts.DisconnectedEventHandler += handleDisconnect;
-                Connection c = new ConnectionFactory().Connect(url);
+                IConnection c = new ConnectionFactory().Connect(url);
 
                 Assert.Fail("Expected a failure; did not receive one");
                 
@@ -30,8 +32,14 @@ namespace NATSUnitTests
             }
             catch (Exception e)
             {
-                System.Console.WriteLine("Success with expected failure: " + e.Message);
-                return;
+                if (e.Message.Contains("Authorization"))
+                {
+                    System.Console.WriteLine("Success with expected failure: " + e.Message);
+                }
+                else
+                {
+                    Assert.Fail("Unexpected exception thrown: " + e);
+                }
             }
             finally
             {
@@ -48,8 +56,11 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestAuthSuccess()
         {
-            Connection c = new ConnectionFactory().Connect("nats://username:password@localhost:8232");
-            c.Close();
+            using (NATSServer s = util.CreateServerWithConfig("auth_1222.conf"))
+            {
+                IConnection c = new ConnectionFactory().Connect("nats://username:password@localhost:1222");
+                c.Close();
+            }
         }
 
         [TestMethod]
@@ -57,12 +68,16 @@ namespace NATSUnitTests
         {
             try
             {
-                //connectAndFail("nats://username@localhost:8232");
-                connectAndFail("nats://username:badpass@localhost:8232");
-                connectAndFail("nats://localhost:8232");
+                using (NATSServer s = util.CreateServerWithConfig("auth_1222.conf"))
+                {
+                   // connectAndFail("nats://username@localhost:1222");
+                    connectAndFail("nats://username:badpass@localhost:1222");
+                    connectAndFail("nats://localhost:1222");
 
-                // FIXME - this one fails.
-                connectAndFail("nats://badname:password@localhost:8232");
+                    // FIXME - this one fails.
+                    connectAndFail("nats://badname:password@localhost:1222");
+                }
+
 
             }
             catch (Exception e)
