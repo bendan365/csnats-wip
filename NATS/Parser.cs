@@ -24,11 +24,6 @@ namespace NATS.Client
         MemoryStream argBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
         MemoryStream msgBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
 
-        byte[] asdmsgBuf  = new byte[1024];
-        byte[] asdscratch = new Byte[MAX_CONTROL_LINE_SIZE];
-
-        //internal const int MSG_PAYLOAD = 23;
-
         internal Parser(Connection conn)
         {
             this.conn = conn;

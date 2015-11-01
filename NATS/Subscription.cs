@@ -3,13 +3,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
 
+// disable XML comment warnings
+#pragma warning disable 1591
+
 namespace NATS.Client
 {
-    // A Subscription represents interest in a given subject.
-    /// <summary>
-    /// A Subscription object represents interest in a given subject.
-    /// A subscription is created and attached to a connection.
-    /// </summary>
     public class Subscription : ISubscription, IDisposable
     {
         readonly  internal  Object mu = new Object(); // lock
@@ -45,10 +43,7 @@ namespace NATS.Client
                 mch = null;
             }
         }
-
-        /// <summary>
-        /// Gets the subject of interest.
-        /// </summary>
+ 
         public string Subject
         {
             get { return subject; }
@@ -59,17 +54,11 @@ namespace NATS.Client
         // only be processed by one member of the group.
         string queue;
 
-        /// <summary>
-        /// Gets the name of the queue groups this subscriber belongs to.
-        /// </summary>
         public string Queue
         {
             get { return queue; }
         }
 
-        /// <summary>
-        /// Gets the Connection this subscriber was created on.
-        /// </summary>
         public Connection Connection
         {
             get
@@ -119,9 +108,6 @@ namespace NATS.Client
             return true;
         }
 
-        /// <summary>
-        /// True if the subscription is active, false otherwise.
-        /// </summary>
         public bool IsValid
         {
             get
@@ -133,9 +119,6 @@ namespace NATS.Client
             }
         }
 
-        /// <summary>
-        /// Removes interest in the given subject.
-        /// </summary>
         public virtual void Unsubscribe()
         {
             Connection c;
@@ -150,13 +133,6 @@ namespace NATS.Client
             c.unsubscribe(this, 0);
         }
 
-        /// <summary>
-        /// AutoUnsubscribe will issue an automatic Unsubscribe that is
-        /// processed by the server when max messages have been received.
-        /// This can be useful when sending a request to an unknown number
-        /// of subscribers. Request() uses this functionality.
-        /// </summary>
-        /// <param name="max">Number of messages to receive before unsubscribing.</param>
         public virtual void AutoUnsubscribe(int max)
         {
             Connection localConn = null;
@@ -172,10 +148,6 @@ namespace NATS.Client
             localConn.unsubscribe(this, max);
         }
 
-        /// <summary>
-        /// Gets the number of messages received, but not processed,
-        /// this subscriber.
-        /// </summary>
         public int QueuedMessageCount
         {
             get

@@ -159,6 +159,8 @@ namespace NATS.Client
         internal const string subProto   = "SUB {0} {1} {2}" + IC._CRLF_;
         internal const string unsubProto = "UNSUB {0} {1}" + IC._CRLF_;
 
+        internal const string pongProtoNoCRLF = "PONG"; 
+
         internal const string STALE_CONNECTION = "Stale Connection";
     }
 

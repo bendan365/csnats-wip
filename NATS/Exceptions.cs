@@ -46,6 +46,7 @@ namespace NATS.Client
     public class NATSSecureConnRequiredException : NATSException
     {
         internal NATSSecureConnRequiredException() : base("A secure connection is required.") { }
+        internal NATSSecureConnRequiredException(String s) : base(s) { }
     }
 
     public class NATSConnectionClosedException : NATSException

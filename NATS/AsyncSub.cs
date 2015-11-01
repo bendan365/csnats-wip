@@ -2,6 +2,9 @@
 using System.Threading;
 using System.Threading.Tasks;
 
+// disable XML comment warnings
+#pragma warning disable 1591
+
 namespace NATS.Client
 {
     /// <summary>
@@ -24,7 +27,7 @@ namespace NATS.Client
         internal AsyncSubscription(Connection conn, string subject, string queue)
             : base(conn, subject, queue) { }
 
-        protected internal override bool processMsg(Msg msg)
+        internal protected override bool processMsg(Msg msg)
         {
             Connection c;
             MsgHandler handler;
@@ -50,6 +53,11 @@ namespace NATS.Client
             {
                 msgHandlerArgs.msg = msg;
                 msgHandler(this, msgHandlerArgs);
+            }
+            else
+            {
+                Unsubscribe();
+                this.conn = null;
             }
 
             return true;
@@ -98,6 +106,9 @@ namespace NATS.Client
         /// </summary>
         public void Start()
         {
+            if (conn == null)
+                throw new NATSBadSubscriptionException();
+
             conn.sendSubscriptonMessage(this);
             enableAsyncProcessing();
         }

@@ -8,6 +8,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 
+// disable XM comment warnings
+#pragma warning disable 1591
+
 namespace NATS.Client
 {
     /// <summary>
@@ -222,11 +225,21 @@ namespace NATS.Client
             TcpClient     client = null;
             NetworkStream stream = null;
 
-            internal void open(Srv s)
+            internal void open(Srv s, int timeoutMillis)
             {
                 lock (mu)
                 {
-                    client = new TcpClient(s.url.Host, s.url.Port);
+                    client = new TcpClient();
+
+                    IAsyncResult r = client.BeginConnect(s.url.Host, s.url.Port, null, null);
+
+                    if (r.AsyncWaitHandle.WaitOne(
+                        TimeSpan.FromMilliseconds(timeoutMillis)) == false)
+                    {
+                        client = null;
+                        throw new NATSConnectionException("Timeout");
+                    }
+                    client.EndConnect(r);
 
                     client.NoDelay = false;  // TODO:  See how this works w/ flusher.
 
@@ -234,6 +247,14 @@ namespace NATS.Client
                     client.SendBufferSize    = Defaults.defaultBufSize;
 
                     stream = client.GetStream();
+                }
+            }
+
+            internal int ConnectTimeout
+            {
+                set
+                {
+                    ConnectTimeout = value;
                 }
             }
 
@@ -481,7 +502,7 @@ namespace NATS.Client
         {
             currentServer.updateLastAttempt();
 
-            conn.open(currentServer);
+            conn.open(currentServer, opts.Timeout);
 
             // TODO:  Does this work if the underlying tcp stream is dead?
             if (pending != null && bw != null)
@@ -571,7 +592,7 @@ namespace NATS.Client
             }
         }
 
-        public string ConnectedURL
+        public string ConnectedUrl
         {
             get
             {
@@ -609,20 +630,16 @@ namespace NATS.Client
         }
 
         // Process a connected connection and initialize properly.
-        // The lock should not be held entering this function.
+        // Caller must lock.
         private void processConnectInit()
         {
-            lock (mu)
-            {
-                this.status = ConnState.CONNECTING;
+            this.status = ConnState.CONNECTING;
 
-                processExpectedInfo();
-            }
-
-            // TODO: better inline?
-            Task.Run(() => { spinUpSocketWatchers(); });
+            processExpectedInfo();
 
             sendConnect();
+
+            new Task(() => { spinUpSocketWatchers(); }).Start();
         }
 
         internal void connect()
@@ -643,17 +660,15 @@ namespace NATS.Client
 
                         s.didConnect = true;
                         s.reconnects = 0;
+
+                        processConnectInit();
+
+                        connected = true;
                     }
 
-                    processConnectInit();
-
-                    connected = true;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    if (lastEx != null)
-                        lastEx = new NATSConnectionException("Unable to connect.", e);
-
                     close(ConnState.DISCONNECTED, false);
                     lock (mu)
                     {
@@ -714,9 +729,7 @@ namespace NATS.Client
             }
             catch (Exception e)
             {
-                // UNLOCK????
                 processOpError(e);
-                // Throw?
                 return;
             }
             finally
@@ -747,17 +760,6 @@ namespace NATS.Client
         {
             byte[] sendBytes = System.Text.Encoding.UTF8.GetBytes(value);
             bw.Write(sendBytes, 0, sendBytes.Length);
-        }
-
-        // Sends a protocol control message by queueing into the bufio writer
-        // and kicking the flush method.  These writes are protected.
-        private void sendProto(string value)
-        {
-            lock (mu)
-            {
-                writeString(value);
-                kickFlusher();
-            }
         }
 
         private void sendProto(byte[] value, int length)
@@ -807,20 +809,14 @@ namespace NATS.Client
         }
 
 
+        // caller must lock.
         private void sendConnect()
         {
-            string cProto = null;
- 
-            lock (mu)
-            {
-                cProto = connectProto();
-            }
-
-            sendProto(cProto);
-
             try
             {
-                FlushTimeout(opts.Timeout);
+                writeString(connectProto());
+                bw.Write(pingProtoBytes, 0, pingProtoBytesLen);
+                bw.Flush();
             }
             catch (Exception ex)
             {
@@ -828,16 +824,44 @@ namespace NATS.Client
                     throw new NATSException("Error sending connect protocol message", ex);
             }
 
-            lock (mu)
+            string result = null;
+            try
             {
-                if (isClosed())
-                {
-                    if (lastEx != null)
-                        throw lastEx;
-                }
+                StreamReader sr = new StreamReader(bw);
+                result = sr.ReadLine();
 
-                // This is where we are truly connected.
+                // Do not close or dispose the stream reader; 
+                // we need the underlying BufferedStream.
+            }
+            catch (Exception ex)
+            {
+                throw new NATSConnectionException("Connect read error", ex);
+            }
+
+            if (IC.pongProtoNoCRLF.Equals(result))
+            {
                 status = ConnState.CONNECTED;
+                return;
+            }
+            else
+            {
+                if (result == null)
+                {
+                    throw new NATSConnectionException("Connect read protocol error");
+                }
+                else if (result.StartsWith(IC._ERR_OP_))
+                {
+                    throw new NATSConnectionException(
+                        result.TrimStart(IC._ERR_OP_.ToCharArray()));
+                }
+                else if (result.StartsWith("tls:"))
+                {
+                    throw new NATSSecureConnRequiredException(result);
+                }
+                else
+                {
+                    throw new NATSException(result);
+                }
             }
         }
 
@@ -889,7 +913,7 @@ namespace NATS.Client
                     }
 
                     // TODO:  need to hold onto task?
-                    Task.Run(() => { doReconnect(); });
+                    new Task(() => { doReconnect(); }).Start();
                 }
             }
         }
@@ -957,39 +981,45 @@ namespace NATS.Client
 
                 try
                 {
+                    // try to create a new connection
                     createConn();
                 }
                 catch (Exception)
                 {
-                    continue;  // ignore
+                    // not yet connected, retry and hold
+                    // the lock.
+                    s.reconnects++;
+                    continue;
                 }
 
-                // We are reconneced
-                reconnects++;
+
 
                 // Clear out server stats for the server we connected to..
                 s.didConnect = true;
                 s.reconnects = 0;
 
-                // Set our status to connecting.
-                status = ConnState.CONNECTING;
+                // process our connect logic
+                try
+                {
+                    processConnectInit();
+                }
+                catch (Exception)
+                {
+                    status = ConnState.RECONNECTING;
+                    continue;
+                }
 
                 // Process Connect logic
                 try
                 {
-                    // send our connect info as normal
-                    processExpectedInfo();
-                    writeString(connectProto());
-
                     // Send existing subscription state
                     resendSubscriptions();
 
                     // Now send off and clear pending buffer
                     flushReconnectPendingItems();
 
+                    pending = null;
                     status = ConnState.CONNECTED;
-
-                    Task.Run(() => { spinUpSocketWatchers(); });
                 }
                 catch (Exception)
                 {
@@ -1198,7 +1228,6 @@ namespace NATS.Client
                         {
                             processSlowConsumer(s);
                         }
-
                     } // maxreached == false
 
                 } // lock s.mu
@@ -1213,16 +1242,14 @@ namespace NATS.Client
         // async error handler if registered.
         void processSlowConsumer(Subscription s)
         {
-            // nc.err = ErrSlowConsumer;
             if (opts.AsyncErrorEventHandler != null && !s.sc)
             {
-                Task.Run(() =>
+                new Task(() =>
                 {
                     opts.AsyncErrorEventHandler(this,
                         new ErrEventArgs(this, s, "Slow Consumer"));
-                });
+                }).Start();
             }
-
             s.sc = true;
         }
 
@@ -1356,7 +1383,11 @@ namespace NATS.Client
         private void publish(string subject, string reply, byte[] data)
         {
             if (string.IsNullOrWhiteSpace(subject))
-                throw new ArgumentException("Invalid subject.");
+            {
+                throw new ArgumentException(
+                    "Subject cannot be null, empty, or whitespace.",
+                    "subject");
+            }
 
             int msgSize = data != null ? data.Length : 0;
 
@@ -1421,16 +1452,9 @@ namespace NATS.Client
             publish(subject, reply, data);
         }
 
-        public Msg Request(string subject, byte[] data, int timeout)
+        private Msg request(string subject, byte[] data, int timeout)
         {
-            Msg m = null;
-
-            // a timeout of 0 will never succeed - don't allow it.
-            if (timeout == 0)
-            {
-                throw new ArgumentException("Timeout cannot be 0.");
-            }
-
+            Msg    m     = null;
             string inbox = NewInbox();
 
             SyncSubscription s = subscribeSync(inbox, null);
@@ -1448,9 +1472,22 @@ namespace NATS.Client
             return m;
         }
 
+        public Msg Request(string subject, byte[] data, int timeout)
+        {
+            // a timeout of 0 will never succeed - do not allow it.
+            if (timeout <= 0)
+            {
+                throw new ArgumentException(
+                    "Timeout must be greater that 0.",
+                    "timeout");
+            }
+
+            return request(subject, data, timeout);
+        }
+
         public Msg Request(string subject, byte[] data)
         {
-            return Request(subject, data, -1);
+            return request(subject, data, -1);
         }
 
         public string NewInbox()
@@ -1670,10 +1707,14 @@ namespace NATS.Client
             processOpError(new NATSStaleConnectionException());
         }
 
-        public void FlushTimeout(int timeout)
+        public void Flush(int timeout)
         {
             if (timeout <= 0)
-                throw new ArgumentException("nats:  Bad timeout value");
+            {
+                throw new ArgumentOutOfRangeException(
+                    "Timeout must be greater than 0",
+                    "timeout");
+            }
 
             lock (mu)
             {
@@ -1714,7 +1755,7 @@ namespace NATS.Client
         public void Flush()
         {
             // 60 second default.
-            FlushTimeout((int)Opts.Timeout);
+            Flush((int)Opts.Timeout);
         }
 
         // resendSubscriptions will send our subscription state back to the
@@ -1752,7 +1793,7 @@ namespace NATS.Client
                         ch.add(true);
                 }
 
-                pongs = null;
+                pongs.Clear();
             }
         }
 
@@ -1796,7 +1837,7 @@ namespace NATS.Client
                     s.closeChannel();
                 }
 
-                subs = null;
+                subs.Clear();
 
                 // perform appropriate callback is needed for a
                 // disconnect;
@@ -1806,14 +1847,16 @@ namespace NATS.Client
                     // TODO:  Mirror go, but this can result in a callback
                     // being invoked out of order.  Why a go routine here?
                     disconnectedEventHandler = Opts.DisconnectedEventHandler;
-                    Task.Run(() => { disconnectedEventHandler(this, new ConnEventArgs(this)); });
+                    new Task(() => { disconnectedEventHandler(this, new ConnEventArgs(this)); }).Start();
                 }
 
                 // Go ahead and make sure we have flushed the outbound buffer.
                 status = ConnState.CLOSED;
                 if (conn.isSetup())
                 {
-                    bw.Flush();
+                    if (bw != null)
+                        bw.Flush();
+
                     conn.teardown();
                 }
 

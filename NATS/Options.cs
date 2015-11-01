@@ -34,6 +34,27 @@ namespace NATS.Client
         // Options can only be created through ConnectionFactory.GetDefaultOptions();
         internal Options() { }
 
+#if foo
+        // deep copy constructor.
+        internal Options(Options o)
+        {
+            this.allowReconnect = o.allowReconnect;
+            this.AsyncErrorEventHandler = o.AsyncErrorEventHandler;
+            this.ClosedEventHandler = o.ClosedEventHandler;
+            this.DisconnectedEventHandler = o.DisconnectedEventHandler.Clone;
+            this.maxPingsOut = o.maxPingsOut;
+            this.maxReconnect = o.maxReconnect;
+            this.name = o.name;
+            this.noRandomize = o.noRandomize;
+            this.pedantic = o.pedantic;
+            this.pingInterval = o.pingInterval;
+            this.ReconnectedEventHandler = (ConnEventHandler)o.ReconnectedEventHandler.Clone();
+            this.reconnectWait = o.reconnectWait;
+            this.secure = o.secure;
+            this.servers = o.servers.Clone();
+        }
+#endif
+
         /// <summary>
         /// Gets or sets the url used to connect to the NATs server.  This may
         /// contain user information.

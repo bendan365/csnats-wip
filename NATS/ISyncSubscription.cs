@@ -11,7 +11,7 @@ namespace NATS.Client
         /// This method will return the next message available to a synchronous subscriber
         /// or block until one is available.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>a NATS message</returns>
         Msg NextMessage();
 
         /// <summary>
@@ -23,7 +23,7 @@ namespace NATS.Client
         /// A timeout of 0 will return null immediately if there are no messages.
         /// </remarks>
         /// <param name="timeout">Timeout value</param>
-        /// <returns></returns>
+        /// <returns>a NATS message</returns>
         Msg NextMessage(int timeout);
     }
 }

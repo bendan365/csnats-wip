@@ -22,6 +22,50 @@ namespace NATS.Client
             sub     = null;
         }
 
+        private void init(string subject, string reply, byte[] data)
+        {
+            if (string.IsNullOrWhiteSpace(subject))
+            {
+                throw new ArgumentException(
+                    "Subject cannot be null, empty, or whitespace.",
+                    "subject");
+            }
+
+            this.Subject = subject;
+            this.Reply = reply;
+            this.Data = data;
+        }
+
+        /// <summary>
+        /// Creates a message with a subject, reply, and data.
+        /// </summary>
+        /// <param name="subject">Subject of the message, required.</param>
+        /// <param name="reply">Reply subject, can be null.</param>
+        /// <param name="data">Message payload</param>
+        public Msg(string subject, string reply, byte[] data)
+        {
+            init(subject, reply, data);
+        }
+
+        /// <summary>
+        /// Creates a message with a subject and data.
+        /// </summary>
+        /// <param name="subject">Subject of the message, required.</param>
+        /// <param name="data">Message payload</param>
+        public Msg(string subject, byte[] data)
+        {
+            init(subject, null, data);
+        }
+
+        /// <summary>
+        /// Creates a message with a subject and no payload.
+        /// </summary>
+        /// <param name="subject">Subject of the message, required.</param>
+        public Msg(string subject)
+        {
+            init(subject, null, null);
+        }
+
         internal Msg(MsgArg arg, Subscription s, byte[] data)
         {
             this.subject = new String(arg.subject.ToCharArray());
@@ -73,7 +117,10 @@ namespace NATS.Client
             set
             {
                 if (value == null)
+                {
                     this.data = null;
+                    return;
+                }
 
                 int len = value.Length;
                 if (len == 0)

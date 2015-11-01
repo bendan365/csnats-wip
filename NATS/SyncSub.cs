@@ -2,6 +2,9 @@
 using System.Threading;
 using System.Threading.Tasks;
 
+// disable XM comment warnings
+#pragma warning disable 1591
+
 namespace NATS.Client
 {
     public sealed class SyncSubscription : Subscription, ISyncSubscription, ISubscription 
@@ -9,26 +12,11 @@ namespace NATS.Client
         internal SyncSubscription(Connection conn, string subject, string queue)
             : base(conn, subject, queue) { }
 
-        /// <summary>
-        /// This method will return the next message available to a synchronous subscriber
-        /// or block until one is available.
-        /// </summary>
-        /// <returns></returns>
         public Msg NextMessage()
         {
             return NextMessage(-1);
         }
 
-        /// <summary>
-        /// This method will return the next message available to a synchronous subscriber
-        /// or block until one is available. A timeout can be used to return when no
-        /// message has been delivered.
-        /// </summary>
-        /// <remarks>
-        /// A timeout of 0 will return null immediately if there are no messages.
-        /// </remarks>
-        /// <param name="timeout">Timeout value</param>
-        /// <returns></returns>
         public Msg NextMessage(int timeout)
         {
             Connection   localConn;
@@ -38,10 +26,10 @@ namespace NATS.Client
 
             lock (mu)
             {
-                if (mch == null)
-                    throw new NATSConnectionClosedException();
                 if (conn == null)
                     throw new NATSBadSubscriptionException();
+                if (mch == null)
+                    throw new NATSConnectionClosedException();
                 if (sc)
                     throw new NATSSlowConsumerException();
 

@@ -18,7 +18,7 @@ namespace NATS.Client
         /// <summary>
         /// Returns the url of the server currently connected, null otherwise.
         /// </summary>
-        string ConnectedURL { get; }
+        string ConnectedUrl { get; }
 
         /// <summary>
         /// Returns the id of the server currently connected.
@@ -136,7 +136,7 @@ namespace NATS.Client
         /// receives the internal reply.
         /// </summary>
         /// <param name="timeout">The timeout in milliseconds.</param>
-        void FlushTimeout(int timeout);
+        void Flush(int timeout);
 
         /// <summary>
         /// Flush will perform a round trip to the server and return when it

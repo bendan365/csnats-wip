@@ -16,7 +16,7 @@ namespace NATS.Client
         /// </summary>
         /// <param name="url">The url</param>
         /// <returns>A new connection to the NATS server</returns>
-        public Connection Connect(string url)
+        public IConnection Connect(string url)
         {
             Options opts = new Options();
             opts.Url = url;
@@ -40,7 +40,7 @@ namespace NATS.Client
         /// </summary>
         /// <param name="url">connect url</param>
         /// <returns>A new connection to the NATS server</returns>
-        public Connection SecureConnect(string url)
+        public IConnection SecureConnect(string url)
         {
             Options opts = new Options();
             opts.Url = url;
@@ -52,7 +52,7 @@ namespace NATS.Client
         /// Connect to the NATs server using default options.
         /// </summary>
         /// <returns>A new connection to the NATS server</returns>
-        public Connection Connect()
+        public IConnection Connect()
         {
             return Connect(new Options());
         }
@@ -62,7 +62,7 @@ namespace NATS.Client
         /// </summary>
         /// <param name="opts">NATs client options</param>
         /// <returns>A new connection to the NATS server</returns>
-        public Connection Connect(Options opts)
+        public IConnection Connect(Options opts)
         {
             Connection nc = new Connection(opts);
             nc.connect();

@@ -10,7 +10,7 @@ namespace SampleNatsApplication
     {
         public SimpleAsyncSubscriber()
         {
-            using (Connection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().Connect())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("bar"))
                 {
@@ -59,7 +59,7 @@ namespace SampleNatsApplication
             Options opts = ConnectionFactory.GetDefaultOptions();
             //opts.Url = "nats://localhost:4222";
             System.Console.WriteLine(opts.ToString());
-            Connection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().Connect(opts);
             ISyncSubscription s = c.SubscribeSync(">");
             asyncPublishMessage(c);
             Msg m = s.NextMessage();
@@ -80,12 +80,12 @@ namespace SampleNatsApplication
             c.Close();
         }
 
-        private void publishMessage(Connection conn)
+        private void publishMessage(IConnection conn)
         {
             conn.Publish("foo", Encoding.UTF8.GetBytes("data"));
         }
 
-        private void asyncPublishMessage(Connection conn)
+        private void asyncPublishMessage(IConnection conn)
         {
             Task.Run(() => { publishMessage(conn); });
         }
@@ -107,7 +107,7 @@ namespace SampleNatsApplication
         {
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.Url = "nats://localhost:4222";
-            using (Connection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().Connect(opts))
             {   
                 finished = false;
 
@@ -156,7 +156,7 @@ namespace SampleNatsApplication
 
         public void TestRequestReply()
         {
-            using (Connection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().Connect())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("req"))
                 {
@@ -202,7 +202,7 @@ namespace SampleNatsApplication
             opts.ClosedEventHandler = ClosedHandler;
             System.Console.WriteLine(opts);
 
-            Connection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().Connect(opts);
             System.Console.WriteLine("Connected!");
             Thread.Sleep(10000);
             c.Close();
@@ -216,7 +216,7 @@ namespace SampleNatsApplication
         private void ReconnectedHandler(object sender, ConnEventArgs args)
         {
             System.Console.WriteLine("Connection Reconnected to {0}.",
-                args.Conn.ConnectedURL);
+                args.Conn.ConnectedUrl);
             
         }
 
@@ -241,7 +241,7 @@ namespace SampleNatsApplication
             o.AsyncErrorEventHandler   = ErrorHandler;
             o.DisconnectedEventHandler = DisconnectedHandler;
 
-            using (Connection c = new ConnectionFactory().Connect(o))
+            using (IConnection c = new ConnectionFactory().Connect(o))
             {
                 Console.WriteLine("Kill and restart the server....");
                 Thread.Sleep(600000);
@@ -263,7 +263,7 @@ namespace SampleNatsApplication
             m.Subject = "subject";
             m.AssignData(data);
 
-            using (Connection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().Connect())
             {
                 using (ISyncSubscription s = c.SubscribeSync("subject"))
                 {
@@ -290,7 +290,7 @@ namespace SampleNatsApplication
             System.Console.WriteLine("Large Message Test Passed.");
         }
 
-        private void SubscribeAndSend(Connection c)
+        private void SubscribeAndSend(IConnection c)
         {
             using (ISyncSubscription s = c.SubscribeSync("foo"))
             {
@@ -307,7 +307,7 @@ namespace SampleNatsApplication
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.Timeout = 120000;
             opts.Url = "nats://Colin:BadPassword@localhost:4222";
-            using (Connection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().Connect(opts))
             {
                 System.Console.WriteLine("Connected");
                 SubscribeAndSend(c);
@@ -320,7 +320,7 @@ namespace SampleNatsApplication
             m.Subject = "subject";
             m.AssignData(Encoding.UTF8.GetBytes("hello"));
 
-            using (Connection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().Connect())
             {
                 using (ISyncSubscription s = c.SubscribeSync("subject.>"))
                 {
