@@ -25,7 +25,7 @@ namespace NATSUnitTests.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("C:\\Go\\bin\\gnatsd.exe")]
+        [global::System.Configuration.DefaultSettingValueAttribute("gnatsd.exe")]
         public string gnatsd {
             get {
                 return ((string)(this["gnatsd"]));

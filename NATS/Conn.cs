@@ -1237,7 +1237,7 @@ namespace NATS.Client
                 convertToStrBuf[i] = (char)buffer[i];
             }
 
-            /// This is the copy operation for msg arg strings.
+            // This is the copy operation for msg arg strings.
             return new String(convertToStrBuf, 0, (int)length);
         }
 
