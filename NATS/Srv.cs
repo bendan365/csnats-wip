@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 
 namespace NATS.Client
 {

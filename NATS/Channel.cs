@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -8,36 +10,80 @@ using System.Threading.Tasks;
 
 namespace NATS.Client
 {
-    // This class mirrors GO channel functionality - it's basically a
-    // a threadsafe blocking queue.
+    // Roll our own Channels - Concurrent Bag is more heavyweight
+    // than we need.
     internal sealed class Channel<T>
     {
-        BlockingCollection<T> coll;
-
-        internal Channel(int size)
-        {
-            coll = new BlockingCollection<T>(size);
-        }
-
+        Queue<T> q;
+        Object     qLock = new Object();
+        bool       finished = false;
+        
         internal Channel()
         {
-            coll = new BlockingCollection<T>();
+            q = new Queue<T>(1024);
         }
 
-        internal bool isComplete()
+        internal Channel(int initialCapacity)
         {
-            return coll.IsAddingCompleted;
+            q = new Queue<T>(initialCapacity);
         }
 
-        internal void add(T val)
+        internal T get(int timeout)
         {
-            try
+            lock (qLock)
             {
-                coll.Add(val);
+                if (finished)
+                    return default(T);
+
+                if (q.Count > 0)
+                {
+                    return q.Dequeue();
+                }
+                else
+                {
+                    if (timeout < 0)
+                    {
+                        Monitor.Wait(qLock);
+                    }
+                    else
+                    {
+                        if (Monitor.Wait(qLock, timeout) == false)
+                        {
+                            throw new NATSTimeoutException();
+                        }
+                    }
+
+                    // we waited..
+                    if (finished)
+                        return default(T);
+
+                    return q.Dequeue();
+                }
             }
-            catch (InvalidOperationException ioe)
-            { 
-                System.Console.WriteLine(ioe); 
+
+        } // get
+        
+        internal void add(T item)
+        {
+            lock (qLock)
+            {
+                q.Enqueue(item);
+
+                // if the queue count was previously zero, we were
+                // waiting, so signal.
+                if (q.Count <= 1)
+                {
+                    Monitor.Pulse(qLock);
+                }
+            }
+        }
+
+        internal void close()
+        {
+            lock (qLock)
+            {
+                finished = true;
+                Monitor.Pulse(qLock);
             }
         }
 
@@ -45,34 +91,14 @@ namespace NATS.Client
         {
             get
             {
-                return coll.Count;
+                lock (qLock)
+                {
+                    return q.Count;
+                }
             }
         }
 
-        internal T get()
-        {
-            return (T)coll.Take();
-        }
+    } // class Channel
 
-        internal T get(int msTimeout)
-        {
-            T item;
-            if (coll.TryTake(out item, msTimeout))
-            {
-                return item;
-            }
-
-            if (msTimeout > 0)
-            {
-                throw new NATSTimeoutException();
-            }
-
-            return default(T);
-        }
-
-        internal void close()
-        {
-            coll.CompleteAdding();
-        }
-    }
 }
+

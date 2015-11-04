@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NATS.Client;
 using System.Threading;
@@ -38,18 +40,18 @@ namespace NATSUnitTests
             Options o = ConnectionFactory.GetDefaultOptions();
 
             o.NoRandomize = true;
-    
+
             UnitTestUtilities.testExpectedException(
                 () => { cf.Connect(); },
                 typeof(NATSNoServersException));
-            
+
             o.Servers = testServers;
 
             UnitTestUtilities.testExpectedException(
                 () => { cf.Connect(o); },
                 typeof(NATSNoServersException));
 
-	        // Make sure we can connect to first server if running
+            // Make sure we can connect to first server if running
             using (NATSServer ns = utils.CreateServerOnPort(1222))
             {
                 c = cf.Connect(o);
@@ -111,8 +113,10 @@ namespace NATSUnitTests
             };
 
             Options opts = ConnectionFactory.GetDefaultOptions();
+            opts.MaxReconnect = 2;
+            opts.ReconnectWait = 1000;
             opts.NoRandomize = true;
-            opts.Servers = testServers;
+            opts.Servers = plainServers;
 
             Object disconnectLock = new Object();
             opts.DisconnectedEventHandler += (sender, args) =>
@@ -162,10 +166,10 @@ namespace NATSUnitTests
                     Assert.IsTrue(c.ConnectedUrl.Equals(testServers[2]));
 
                     reconnectSw.Stop();
-                    
+
                     // Make sure we did not wait on reconnect for default time.
-	                // Reconnect should be fast since it will be a switch to the
-	                // second server and not be dependent on server restart time.
+                    // Reconnect should be fast since it will be a switch to the
+                    // second server and not be dependent on server restart time.
                     // TODO:  .NET connect timeout is exceeding long compared to
                     // GO's.  Look shortening it, or living with it.
                     //if (reconnectSw.ElapsedMilliseconds > opts.ReconnectWait)
@@ -184,7 +188,7 @@ namespace NATSUnitTests
 
             public string ConnectedUrl
             {
-                get { return c.ConnectedUrl;  }
+                get { return c.ConnectedUrl; }
             }
 
             public void waitForReconnect()
@@ -215,7 +219,8 @@ namespace NATSUnitTests
             }
         }
 
-        [TestMethod]
+
+        //[TestMethod]
         public void TestHotSpotReconnect()
         {
             int numClients = 10;
@@ -225,14 +230,17 @@ namespace NATSUnitTests
             opts.Servers = testServers;
 
             NATSServer s1 = utils.CreateServerOnPort(1222);
-            Task[] waitgroup = new Task[numClients];            
+            Task[] waitgroup = new Task[numClients];
 
 
             for (int i = 0; i < numClients; i++)
             {
                 clients[i] = new SimClient();
-                clients[i].Connect(testServers);
-                Task t = new Task(() => { clients[i].waitForReconnect(); });
+                Task t = new Task(() => {
+                    clients[i].Connect(testServers); 
+                    clients[i].waitForReconnect();
+                });
+                t.Start();
                 waitgroup[i] = t;
             }
 
@@ -258,8 +266,8 @@ namespace NATSUnitTests
             }
 
             Assert.IsTrue(unknown == 0);
-            int delta = Math.Abs(s2Count-s3Count);
-            int range = numClients/30;
+            int delta = Math.Abs(s2Count - s3Count);
+            int range = numClients / 30;
             if (delta > range)
             {
                 Assert.Fail("Connected clients to servers out of range: {0}/{1}", delta, range);
@@ -270,7 +278,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestProperReconnectDelay()
         {
-            Object  mu = new Object();
+            Object mu = new Object();
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.Servers = testServers;
             opts.NoRandomize = true;
@@ -324,9 +332,9 @@ namespace NATSUnitTests
             Object dmu = new Object();
             Object cmu = new Object();
 
-            opts.Servers = testServers;
+            opts.Servers = this.testServersShortList;
             opts.NoRandomize = true;
-            opts.MaxReconnect = 5;
+            opts.MaxReconnect = 2;
             opts.ReconnectWait = 25; // millis
             opts.Timeout = 500;
 
@@ -334,7 +342,7 @@ namespace NATSUnitTests
 
             opts.DisconnectedEventHandler = (sender, args) =>
             {
-                lock(dmu)
+                lock (dmu)
                 {
                     disconnectHandlerCalled = true;
                     Monitor.Pulse(dmu);
@@ -357,20 +365,21 @@ namespace NATSUnitTests
                 {
                     s1.Shutdown();
 
-
                     lock (dmu)
                     {
-                        Assert.IsTrue(Monitor.Wait(dmu, 20000));
+                        if (!disconnectHandlerCalled)
+                            Assert.IsTrue(Monitor.Wait(dmu, 20000));
                     }
 
                     lock (cmu)
                     {
-                        Assert.IsTrue(Monitor.Wait(cmu, 60000));
+                        if (!closedHandlerCalled)
+                            Assert.IsTrue(Monitor.Wait(cmu, 60000));
                     }
 
                     Assert.IsTrue(disconnectHandlerCalled);
                     Assert.IsTrue(closedHandlerCalled);
-                    Assert.IsFalse(c.IsClosed());
+                    Assert.IsTrue(c.IsClosed());
                 }
             }
         }
@@ -382,9 +391,9 @@ namespace NATSUnitTests
             Object dmu = new Object();
             Object cmu = new Object();
 
-            opts.Servers = testServers;
+            opts.Servers = testServersShortList;
             opts.NoRandomize = true;
-            opts.MaxReconnect = 10;
+            opts.MaxReconnect = 2;
             opts.ReconnectWait = 100; // millis
 
             bool disconnectHandlerCalled = false;
@@ -414,10 +423,10 @@ namespace NATSUnitTests
                 {
                     s1.Shutdown();
 
-
                     lock (dmu)
                     {
-                        Assert.IsTrue(Monitor.Wait(dmu, 20000));
+                        if (!disconnectHandlerCalled)
+                           Assert.IsTrue(Monitor.Wait(dmu, 20000));
                     }
 
                     Stopwatch sw = new Stopwatch();
@@ -425,13 +434,14 @@ namespace NATSUnitTests
 
                     lock (cmu)
                     {
-                        Assert.IsTrue(Monitor.Wait(cmu, 60000));
+                        if (!closedHandlerCalled)
+                            Assert.IsTrue(Monitor.Wait(cmu, 60000));
                     }
 
                     sw.Stop();
 
                     int expected = opts.MaxReconnect * opts.ReconnectWait;
- 
+
                     Assert.IsTrue(sw.ElapsedMilliseconds < (expected + 500));
 
                     Assert.IsTrue(disconnectHandlerCalled);
@@ -441,7 +451,7 @@ namespace NATSUnitTests
             }
         }
 
-        [TestMethod]
+        //[TestMethod]
         public void TestPingReconnect()
         {
             /// Work in progress
@@ -451,10 +461,10 @@ namespace NATSUnitTests
             Object mu = new Object();
 
             opts.Servers = testServersShortList;
-	        opts.NoRandomize = true;
+            opts.NoRandomize = true;
             opts.ReconnectWait = 200;
-	        opts.PingInterval = 50;
-	        opts.MaxPingsOut = -1;
+            opts.PingInterval = 50;
+            opts.MaxPingsOut = -1;
             opts.Timeout = 1000;
 
 

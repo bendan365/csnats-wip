@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NATS.Client;
 using System.Text;
@@ -125,6 +127,11 @@ namespace NATSUnitTests
                 }
             };
 
+            opts.ReconnectedEventHandler = (sender, args) =>
+            {
+                System.Console.WriteLine("Reconnected");
+            };
+
             NATSServer ns = utils.CreateServerOnPort(22222);
 
             using (IConnection c = new ConnectionFactory().Connect(opts))
@@ -147,170 +154,145 @@ namespace NATSUnitTests
                     ns.Shutdown();
                     Assert.IsTrue(Monitor.Wait(testLock, 100000));
                 }
-                   
+
+                System.Console.WriteLine("Sending message.");
                 c.Publish("foo", Encoding.UTF8.GetBytes("Hello"));
-
+                System.Console.WriteLine("Done sending message.");
                 // restart the server.
-                ns = utils.CreateServerOnPort(22222);
-
-                lock (msgLock)
+                using (ns = utils.CreateServerOnPort(22222))
                 {
-                    c.Flush(5000);
-                    Assert.IsTrue(Monitor.Wait(msgLock, 10000));
+                    lock (msgLock)
+                    {
+                        c.Flush(50000);
+                        Assert.IsTrue(Monitor.Wait(msgLock, 10000));
+                    }
+
+                    Assert.IsTrue(c.Stats.Reconnects == 1);
                 }
-
-                Assert.IsTrue(c.Stats.Reconnects == 1);
-
-                ns.Shutdown();
             }
         }
-#if sdlfkjsdflkj
 
-func TestBasicReconnectFunctionality(t *testing.T) {
-	ts := startReconnectServer(t)
+        int received = 0;
 
-	ch := make(chan bool)
+        [TestMethod]
+        public void TestExtendedReconnectFunctionality()
+        {
+            Options opts = reconnectOptions;
 
-	opts := reconnectOpts
-	nc, _ := opts.Connect()
-	ec, err := nats.NewEncodedConn(nc, nats.DEFAULT_ENCODER)
-	if err != nil {
-		t.Fatalf("Failed to create an encoded connection: %v\n", err)
-	}
+            Object disconnectedLock = new Object();
+            Object msgLock = new Object();
+            Object reconnectedLock = new Object();
 
-	testString := "bar"
-	ec.Subscribe("foo", func(s string) {
-		if s != testString {
-			t.Fatal("String doesn't match")
-		}
-		ch <- true
-	})
-	ec.Flush()
+            opts.DisconnectedEventHandler = (sender, args) =>
+            {
+                System.Console.WriteLine("Disconnected.");
+                lock (disconnectedLock)
+                {
+                    Monitor.Pulse(disconnectedLock);
+                }
+            };
 
-	ts.Shutdown()
-	// server is stopped here...
+            opts.ReconnectedEventHandler = (sender, args) =>
+            {
+                System.Console.WriteLine("Reconnected.");
+                lock (reconnectedLock)
+                {
+                    Monitor.Pulse(reconnectedLock);
+                }
+            };
 
-	dch := make(chan bool)
-	opts.DisconnectedCB = func(_ *nats.Conn) {
-		dch <- true
-	}
-	Wait(dch)
+            byte[] payload = Encoding.UTF8.GetBytes("bar");
+            NATSServer ns = utils.CreateServerOnPort(22222);
 
-	if err := ec.Publish("foo", testString); err != nil {
-		t.Fatalf("Failed to publish message: %v\n", err)
-	}
+            using (IConnection c = new ConnectionFactory().Connect(opts))
+            {
+                IAsyncSubscription s1 = c.SubscribeAsync("foo");
+                IAsyncSubscription s2 = c.SubscribeAsync("foobar");
 
-	ts = startReconnectServer(t)
-	defer ts.Shutdown()
+                s1.MessageHandler += incrReceivedMessageHandler;
+                s2.MessageHandler += incrReceivedMessageHandler;
 
-	if err := ec.FlushTimeout(5 * time.Second); err != nil {
-		t.Fatalf("Error on Flush: %v", err)
-	}
+                s1.Start();
+                s2.Start();
 
-	if e := Wait(ch); e != nil {
-		t.Fatal("Did not receive our message")
-	}
+                received = 0;
 
-	expectedReconnectCount := uint64(1)
-	if ec.Conn.Reconnects != expectedReconnectCount {
-		t.Fatalf("Reconnect count incorrect: %d vs %d\n",
-			ec.Conn.Reconnects, expectedReconnectCount)
-	}
-	nc.Close()
-}
+	            c.Publish("foo", payload);
+                c.Flush();
 
-func TestExtendedReconnectFunctionality(t *testing.T) {
-	ts := startReconnectServer(t)
+                lock(disconnectedLock)
+                {
+                    ns.Shutdown();
+                    // server is stopped here.
 
-	opts := reconnectOpts
-	dch := make(chan bool)
-	opts.DisconnectedCB = func(_ *nats.Conn) {
-		dch <- true
-	}
-	rch := make(chan bool)
-	opts.ReconnectedCB = func(_ *nats.Conn) {
-		rch <- true
-	}
-	nc, err := opts.Connect()
-	if err != nil {
-		t.Fatalf("Should have connected ok: %v", err)
-	}
-	ec, err := nats.NewEncodedConn(nc, nats.DEFAULT_ENCODER)
-	if err != nil {
-		t.Fatalf("Failed to create an encoded connection: %v\n", err)
-	}
-	testString := "bar"
-	received := int32(0)
+                    Assert.IsTrue(Monitor.Wait(disconnectedLock, 20000));
+                }
 
-	ec.Subscribe("foo", func(s string) {
-		atomic.AddInt32(&received, 1)
-	})
+                // subscribe to bar while connected.
+                IAsyncSubscription s3 = c.SubscribeAsync("bar");
+                s3.MessageHandler += incrReceivedMessageHandler;
+                s3.Start();
 
-	sub, _ := ec.Subscribe("foobar", func(s string) {
-		atomic.AddInt32(&received, 1)
-	})
+                // Unsub foobar while disconnected
+                s2.Unsubscribe();
 
-	ec.Publish("foo", testString)
-	ec.Flush()
+                c.Publish("foo", payload);
+                c.Publish("bar", payload);
 
-	ts.Shutdown()
-	// server is stopped here..
+                // server is restarted here...
+                using (NATSServer ts = utils.CreateServerOnPort(22222))
+                {
+                    // wait for reconnect
+                    lock (reconnectedLock)
+                    {
+                        Assert.IsTrue(Monitor.Wait(reconnectedLock, 60000));
+                    }
 
-	// wait for disconnect
-	if e := WaitTime(dch, 2*time.Second); e != nil {
-		t.Fatal("Did not receive a disconnect callback message")
-	}
+                    c.Publish("foobar", payload);
+                    c.Publish("foo", payload);
 
-	// Sub while disconnected
-	ec.Subscribe("bar", func(s string) {
-		atomic.AddInt32(&received, 1)
-	})
+                    using (IAsyncSubscription s4 = c.SubscribeAsync("done"))
+                    {
+                        Object doneLock = new Object();
+                        s4.MessageHandler += (sender, args) =>
+                        {
+                            System.Console.WriteLine("Recieved done message.");
+                            lock (doneLock)
+                            {
+                                Monitor.Pulse(doneLock);
+                            }
+                        };
 
-	// Unsub foobar while disconnected
-	sub.Unsubscribe()
+                        s4.Start();
 
-	if err = ec.Publish("foo", testString); err != nil {
-		t.Fatalf("Received an error after disconnect: %v\n", err)
-	}
+                        lock (doneLock)
+                        {
+                            c.Publish("done", payload);
+                            Assert.IsTrue(Monitor.Wait(doneLock, 2000));
+                        }
+                    }
+                } // NATSServer
 
-	if err = ec.Publish("bar", testString); err != nil {
-		t.Fatalf("Received an error after disconnect: %v\n", err)
-	}
+                if (received != 4)
+                {
+                    Assert.Fail("Expected 4, received {0}.", received);
+                }
+            }
+        }
 
-	ts = startReconnectServer(t)
-	defer ts.Shutdown()
+        private void incrReceivedMessageHandler(object sender,
+            MsgHandlerEventArgs args)
+        {
+            System.Console.WriteLine("Received message on subject {0}.",
+                args.Message.Subject);
+            Interlocked.Increment(ref received);
+        }
 
-	// server is restarted here..
-	// wait for reconnect
-	if e := WaitTime(rch, 2*time.Second); e != nil {
-		t.Fatal("Did not receive a reconnect callback message")
-	}
-
-	if err = ec.Publish("foobar", testString); err != nil {
-		t.Fatalf("Received an error after server restarted: %v\n", err)
-	}
-
-	if err = ec.Publish("foo", testString); err != nil {
-		t.Fatalf("Received an error after server restarted: %v\n", err)
-	}
-
-	ch := make(chan bool)
-	ec.Subscribe("done", func(b bool) {
-		ch <- true
-	})
-	ec.Publish("done", true)
-
-	if e := Wait(ch); e != nil {
-		t.Fatal("Did not receive our message")
-	}
-
-	// Sleep a bit to guarantee scheduler runs and process all subs.
-	time.Sleep(50 * time.Millisecond)
-
-	if atomic.LoadInt32(&received) != 4 {
-		t.Fatalf("Received != %d, equals %d\n", 4, received)
-	}
-}
+        [TestMethod]
+        public void TestQueueSubsOnReconnect()
+        {
+            /// implement me.
+#if complete_me
 
 func TestQueueSubsOnReconnect(t *testing.T) {
 	ts := startReconnectServer(t)
@@ -400,27 +382,45 @@ func TestQueueSubsOnReconnect(t *testing.T) {
 	// Reconnect Base Test
 	sendAndCheckMsgs(10)
 }
+#endif
+        }
 
-func TestIsClosed(t *testing.T) {
-	ts := startReconnectServer(t)
-	nc := NewConnection(t, 22222)
-	if nc.IsClosed() == true {
-		t.Fatalf("IsClosed returned true when the connection is still open.")
-	}
-	ts.Shutdown()
-	if nc.IsClosed() == true {
-		t.Fatalf("IsClosed returned true when the connection is still open.")
-	}
-	ts = startReconnectServer(t)
-	if nc.IsClosed() == true {
-		t.Fatalf("IsClosed returned true when the connection is still open.")
-	}
-	nc.Close()
-	if nc.IsClosed() == false {
-		t.Fatalf("IsClosed returned false after Close() was called.")
-	}
-	ts.Shutdown()
-}
+        //[TestMethod]
+        public void TestClose()
+        {
+            Options opts = ConnectionFactory.GetDefaultOptions();
+            opts.Url = "nats://localhost:22222";
+            opts.AllowReconnect = true;
+            opts.MaxReconnect = 60;
+
+            using (NATSServer s1 = utils.CreateServerOnPort(22222))
+            {
+                IConnection c = new ConnectionFactory().Connect(opts);
+                Assert.IsFalse(c.IsClosed());
+                
+                s1.Shutdown();
+
+                // FIXME - .NET says still reconnecting.
+                Thread.Sleep(100);
+                if (!c.IsClosed())
+                {
+                    Assert.Fail("Invalid state, expecting closed, received: "
+                        + c.State.ToString());
+                }
+                
+                using (NATSServer s2 = utils.CreateServerOnPort(22222))
+                {
+                    Thread.Sleep(10000);
+                    Assert.IsFalse(c.IsClosed());
+                
+                    c.Close();
+                    Thread.Sleep(1000);
+                    Assert.IsTrue(c.IsClosed());
+                }
+            }
+        }
+
+#if sdlfkjsdflkj
 
 func TestIsReconnectingAndStatus(t *testing.T) {
 	ts := startReconnectServer(t)
@@ -486,70 +486,6 @@ func TestIsReconnectingAndStatus(t *testing.T) {
 	if status := nc.Status(); status != nats.CLOSED {
 		t.Fatalf("Status returned %d after Close() was called instead of CLOSED", status)
 	}
-}
-
-func TestFullFlushChanDuringReconnect(t *testing.T) {
-	ts := startReconnectServer(t)
-	defer ts.Shutdown()
-
-	reconnectch := make(chan bool)
-
-	opts := nats.DefaultOptions
-	opts.Url = "nats://localhost:22222"
-	opts.AllowReconnect = true
-	opts.MaxReconnect = 10000
-	opts.ReconnectWait = 100 * time.Millisecond
-
-	opts.ReconnectedCB = func(_ *nats.Conn) {
-		reconnectch <- true
-	}
-
-	// Connect
-	nc, err := opts.Connect()
-	if err != nil {
-		t.Fatalf("Should have connected ok: %v", err)
-	}
-
-	// Channel used to make the go routine sending messages to stop.
-	stop := make(chan bool)
-
-	// While connected, publish as fast as we can
-	go func() {
-		for i := 0; ; i++ {
-			_ = nc.Publish("foo", []byte("hello"))
-
-			// Make sure we are sending at least flushChanSize (1024) messages
-			// before potentially pausing.
-			if i%2000 == 0 {
-				select {
-				case <-stop:
-					return
-				default:
-					time.Sleep(100 * time.Millisecond)
-				}
-			}
-		}
-	}()
-
-	// Send a bit...
-	time.Sleep(500 * time.Millisecond)
-
-	// Shut down the server
-	ts.Shutdown()
-
-	// Continue sending while we are disconnected
-	time.Sleep(time.Second)
-
-	// Restart the server
-	ts = startReconnectServer(t)
-
-	// Wait for the reconnect CB to be invoked (but not for too long)
-	if e := WaitTime(reconnectch, 5*time.Second); e != nil {
-		t.Fatalf("Reconnect callback wasn't triggered: %v", e)
-	}
-
-	// Close the connection
-	nc.Close()
 }
 
 #endif

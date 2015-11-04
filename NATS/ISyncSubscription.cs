@@ -1,10 +1,17 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
 namespace NATS.Client
 {
+    /// <summary>
+    /// A Syncronous Subscripion will express interest in a given subject.
+    /// The subject can have wildcards (partial:*, full:>).
+    /// Messages arriving are retrieved via NextMsg()
+    /// </summary>
     public interface ISyncSubscription : ISubscription, IDisposable
     {
         /// <summary>

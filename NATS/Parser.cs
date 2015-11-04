@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Collections.Specialized;
@@ -21,11 +23,17 @@ namespace NATS.Client
     {
 
         Connection conn;
-        MemoryStream argBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
-        MemoryStream msgBufStream = new MemoryStream(new byte[Defaults.defaultBufSize]);
+        byte[] argBufBase = new byte[Defaults.defaultBufSize];
+        MemoryStream argBufStream = null;
+
+        byte[] msgBufBase = new byte[Defaults.defaultBufSize];
+        MemoryStream msgBufStream = null;
 
         internal Parser(Connection conn)
         {
+            argBufStream = new MemoryStream(argBufBase);
+            msgBufStream = new MemoryStream(msgBufBase);
+
             this.conn = conn;
         }
 
@@ -35,7 +43,7 @@ namespace NATS.Client
 
         // For performance declare these as consts - they'll be
         // baked into the IL code (thus faster).  An enum would
-        // be nice, but we want speed in this critial section of
+        // be nice, but we want speed in this critical section of
         // message handling.
         private const int OP_START         = 0;
         private const int OP_PLUS          = 1;
@@ -73,11 +81,6 @@ namespace NATS.Client
         private void parseError(byte[] buffer, int position)
         {
             throw new NATSException(string.Format("Parse Error [{0}], {1}", state, buffer));
-        }
-
-        internal void parseConnect(BufferedStream stream)
-        {
-            
         }
 
         internal void parse(byte[] buffer, int len)
@@ -172,8 +175,13 @@ namespace NATS.Client
                             case '\r':
                                 break;
                             case '\n':
-                                conn.processMsgArgs(argBufStream);
+                                conn.processMsgArgs(argBufBase, argBufStream.Position);
                                 argBufStream.Position = 0;
+                                if (conn.msgArgs.size > msgBufBase.Length)
+                                {
+                                    msgBufBase = new byte[conn.msgArgs.size+1];
+                                    msgBufStream = new MemoryStream(msgBufBase);
+                                }
                                 state = MSG_PAYLOAD;
                                 break;
                             default:
@@ -182,9 +190,10 @@ namespace NATS.Client
                         }
                         break;
                     case MSG_PAYLOAD:
-                        if (msgBufStream.Position >= conn.msgArgs.size)
+                        long position = msgBufStream.Position;
+                        if (position >= conn.msgArgs.size)
                         {
-                            conn.processMsg(msgBufStream);
+                            conn.processMsg(msgBufBase, position);
                             msgBufStream.Position = 0;
                             state = MSG_END;
                         }

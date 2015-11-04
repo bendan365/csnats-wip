@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
@@ -76,6 +78,7 @@ namespace NATS.Client
 
                 this.msgs++;
                 this.bytes += bytes;
+
             }
 
             return false;
@@ -85,7 +88,6 @@ namespace NATS.Client
         protected internal virtual bool processMsg(Msg msg)
         {
             return true;
-            // NOOP;
         }
 
         // returns false if the message could not be added because
@@ -135,17 +137,17 @@ namespace NATS.Client
 
         public virtual void AutoUnsubscribe(int max)
         {
-            Connection localConn = null;
+            Connection c = null;
 
             lock (mu)
             {
                 if (conn == null)
                     throw new NATSBadSubscriptionException();
 
-                localConn = conn;
+                c = conn;
             }
 
-            localConn.unsubscribe(this, max);
+            c.unsubscribe(this, max);
         }
 
         public int QueuedMessageCount

@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -76,7 +78,6 @@ namespace NATS.Client
         /// </summary>
         /// <param name="subject">Subject to send the request on.</param>
         /// <param name="data">payload of the message</param>
-        /// <param name="timeout">timeout.</param>
         Msg Request(string subject, byte[] data);
 
         /// <summary>
@@ -104,7 +105,6 @@ namespace NATS.Client
         /// interest in a given subject.
         /// </summary>
         /// <param name="subject">Subject of interest.</param>
-        /// <param name="handler">Message handler delegate function</param>
         /// <returns>A new Subscription</returns>
         IAsyncSubscription SubscribeAsync(string subject);
 
@@ -117,19 +117,18 @@ namespace NATS.Client
         /// <param name="subject">Subject of interest</param>
         /// <param name="queue">Name of the queue group</param>
         /// <returns>A new Subscription</returns>
-        ISyncSubscription QueueSubscribeSync(string subject, string queue);
+        ISyncSubscription SubscribeSync(string subject, string queue);
 
         /// <summary>
-        /// QueueSubscribe creates an asynchronous queue subscriber on the given subject.
+        /// This method creates an asynchronous queue subscriber on the given subject.
         /// All subscribers with the same queue name will form the queue group and
         /// only one member of the group will be selected to receive any given
         /// message asynchronously.
         /// </summary>
         /// <param name="subject">Subject of interest</param>
         /// <param name="queue">Name of the queue group</param>
-        /// <param name="handler">Message handler delegate function</param>
         /// <returns>A new Subscription</returns>
-        IAsyncSubscription QueueSubscribeAsync(string subject, string queue);
+        IAsyncSubscription SubscribeAsync(string subject, string queue);
 
         /// <summary>
         /// Flush will perform a round trip to the server and return when it

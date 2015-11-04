@@ -1,4 +1,7 @@
-﻿namespace NATSUnitTests.Properties {
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+namespace NATSUnitTests.Properties
+{
     
     
     // This class allows you to handle specific events on the settings class:

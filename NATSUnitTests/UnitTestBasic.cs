@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -152,7 +154,8 @@ namespace NATSUnitTests
                     {
                         received = false;
                         c.Publish("foo", omsg);
-                        Monitor.Wait(mu, 10000);
+                        c.Flush();
+                        Monitor.Wait(mu, 30000);
                     }
 
                     if (!received)
@@ -226,11 +229,12 @@ namespace NATSUnitTests
         {
             using (IConnection c = new ConnectionFactory().Connect())
             {
-                using (ISyncSubscription s1 = c.QueueSubscribeSync("foo", "bar"),
-                                         s2 = c.QueueSubscribeSync("foo", "bar"))
+                using (ISyncSubscription s1 = c.SubscribeSync("foo", "bar"),
+                                         s2 = c.SubscribeSync("foo", "bar"))
                 {
                     c.Publish("foo", omsg);
-                    c.Flush();
+                    c.Flush(1000);
+
                     if (s1.QueuedMessageCount + s2.QueuedMessageCount != 1)
                         Assert.Fail("Invalid message count in queue.");
 
@@ -247,7 +251,9 @@ namespace NATSUnitTests
                     {
                         c.Publish("foo", omsg);
                     }
-                    c.Flush();
+                    c.Flush(1000);
+
+                    Thread.Sleep(1000);
                     
                     int r1 = s1.QueuedMessageCount;
                     int r2 = s2.QueuedMessageCount;
@@ -329,15 +335,19 @@ namespace NATSUnitTests
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
+                    Boolean unsubscribed = false;
                     asyncSub = s;
                     //s.MessageHandler += UnsubscribeAfterCount;
                     s.MessageHandler += (sender, args) =>
                     {
-                        if (++count == max)
+                        count++;
+                        System.Console.WriteLine("Count = {0}", count);
+                        if (count == max)
                         {
                             asyncSub.Unsubscribe();
                             lock (mu)
                             {
+                                unsubscribed = true;
                                 Monitor.Pulse(mu);
                             }
                         }
@@ -349,10 +359,15 @@ namespace NATSUnitTests
                     {
                         c.Publish("foo", null, null);
                     }
+                    Thread.Sleep(100);
+                    c.Flush();
 
                     lock (mu)
                     {
-                        Monitor.Wait(mu, 2000);
+                        if (!unsubscribed)
+                        {
+                            Monitor.Wait(mu, 5000);
+                        }
                     }
                 }
 
@@ -413,6 +428,7 @@ namespace NATSUnitTests
                     s.MessageHandler += (sender, args) =>
                     {
                         c.Publish(args.Message.Reply, response);
+                        c.Flush();
                     };
 
                     s.Start();
@@ -444,7 +460,7 @@ namespace NATSUnitTests
 
                     s.Start();
 
-                    Msg m = c.Request("foo", null, 5000);
+                    Msg m = c.Request("foo", null, 50000);
 
                     if (!compare(m.Data, response))
                     {
@@ -529,40 +545,40 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestStats()
         {
-            IConnection c = new ConnectionFactory().Connect();
-
-            byte[] data = Encoding.UTF8.GetBytes("The quick brown fox jumped over the lazy dog");
-            int iter = 10;
-
-            for (int i = 0; i < iter; i++)
+            using (IConnection c = new ConnectionFactory().Connect())
             {
-                c.Publish("foo", data);
+                byte[] data = Encoding.UTF8.GetBytes("The quick brown fox jumped over the lazy dog");
+                int iter = 10;
+
+                for (int i = 0; i < iter; i++)
+                {
+                    c.Publish("foo", data);
+                }
+                c.Flush(100000);
+
+                IStatistics stats = c.Stats;
+                Assert.AreEqual(iter, stats.OutMsgs);
+                Assert.AreEqual(iter * data.Length, stats.OutBytes);
+
+                c.ResetStats();
+
+                // Test both sync and async versions of subscribe.
+                IAsyncSubscription s1 = c.SubscribeAsync("foo");
+                s1.MessageHandler += (sender, arg) => { };
+                s1.Start();
+
+                ISyncSubscription s2 = c.SubscribeSync("foo");
+
+                for (int i = 0; i < iter; i++)
+                {
+                    c.Publish("foo", data);
+                }
+                c.Flush(100000);
+
+                stats = c.Stats;
+                Assert.AreEqual(2 * iter, stats.InMsgs);
+                Assert.AreEqual(2 * iter * data.Length, stats.InBytes);
             }
-
-            IStatistics stats = c.Stats;
-            Assert.AreEqual(iter, stats.OutMsgs);
-            Assert.AreEqual(iter*data.Length, stats.OutBytes);
-            
-            c.ResetStats();
-
-            // Test both sync and async versions of subscribe.
-            IAsyncSubscription s1 = c.SubscribeAsync("foo");
-            s1.MessageHandler += (sender, arg) => { };
-            s1.Start();
-
-            ISyncSubscription s2 = c.SubscribeSync("foo");
-
-            for (int i = 0; i < iter; i++)
-            {
-                c.Publish("foo", data);
-            }
-            c.Flush();
-
-            stats = c.Stats;
-            Assert.AreEqual(2*iter, stats.InMsgs);
-            Assert.AreEqual(2*iter*data.Length, stats.InBytes);
-
-            c.Close();
         }
 
         [TestMethod]
@@ -588,6 +604,28 @@ namespace NATSUnitTests
                 Thread.Sleep(200);
 
                 Assert.AreEqual(1, c.Stats.OutMsgs);
+            }
+        }
+
+        [TestMethod]
+        public void TestLargeMessage()
+        {
+            using (IConnection c = new ConnectionFactory().Connect())
+            {
+                int msgSize = 20480;
+                byte[] msg = new byte[msgSize];
+
+                for (int i = 0; i < msgSize; i++)
+                    msg[i] = (byte)'A';
+
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
+                {
+                    c.Publish("foo", msg);
+                    c.Flush(2000);
+
+                    Msg m = s.NextMessage();
+                    Assert.IsTrue(compare(msg, m.Data));
+                }
             }
         }
 
