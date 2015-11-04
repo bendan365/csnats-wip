@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Text;
 
 namespace NATS.Client
@@ -21,39 +23,36 @@ namespace NATS.Client
         int pingInterval  = Defaults.PingInterval;
         int timeout       = Defaults.Timeout;
 
-        // expose the event handlers directly as to simplify use.
+        /// <summary>
+        /// Represents the method that will handle an event raised 
+        /// when a connection is closed.
+        /// </summary>
         public ConnEventHandler  ClosedEventHandler = null;
+
+        /// <summary>
+        /// Represents the method that will handle an event raised 
+        /// when a connection has been disconnected from a server.
+        /// </summary>
         public ConnEventHandler  DisconnectedEventHandler = null;
+
+        /// <summary>
+        /// Represents the method that will handle an event raised 
+        /// when a connection has reconnected to a server.
+        /// </summary>
         public ConnEventHandler  ReconnectedEventHandler = null;
+
+        /// <summary>
+        /// Represents the method that will handle an event raised 
+        /// when an error occurs out of band.
+        /// </summary>
         public ErrorEventHandler AsyncErrorEventHandler = null;
 
-        int maxPingsOut = Defaults.MaxPingOut;
+        internal int maxPingsOut = Defaults.MaxPingOut;
 
         internal int subChanLen = 40000;
 
         // Options can only be created through ConnectionFactory.GetDefaultOptions();
         internal Options() { }
-
-#if foo
-        // deep copy constructor.
-        internal Options(Options o)
-        {
-            this.allowReconnect = o.allowReconnect;
-            this.AsyncErrorEventHandler = o.AsyncErrorEventHandler;
-            this.ClosedEventHandler = o.ClosedEventHandler;
-            this.DisconnectedEventHandler = o.DisconnectedEventHandler.Clone;
-            this.maxPingsOut = o.maxPingsOut;
-            this.maxReconnect = o.maxReconnect;
-            this.name = o.name;
-            this.noRandomize = o.noRandomize;
-            this.pedantic = o.pedantic;
-            this.pingInterval = o.pingInterval;
-            this.ReconnectedEventHandler = (ConnEventHandler)o.ReconnectedEventHandler.Clone();
-            this.reconnectWait = o.reconnectWait;
-            this.secure = o.secure;
-            this.servers = o.servers.Clone();
-        }
-#endif
 
         /// <summary>
         /// Gets or sets the url used to connect to the NATs server.  This may
@@ -206,8 +205,11 @@ namespace NATS.Client
                 sb.AppendFormat("{0}=null;", name);
         }
 
-
-        // For diagnostics and debugging, this is very useful.
+        /// <summary>
+        /// Returns a string representation of the
+        /// value of this Options instance.
+        /// </summary>
+        /// <returns>String value of this instance.</returns>
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();

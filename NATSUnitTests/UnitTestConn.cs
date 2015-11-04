@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NATS.Client;
 using System.Threading;
@@ -107,7 +109,7 @@ namespace NATSUnitTests
             lock (mu)
             {
                 utils.bounceDefaultServer(1000);
-                Monitor.Wait(mu, 20000);
+                Monitor.Wait(mu);
             }
             c.Close();
             Assert.IsTrue(disconnected);
@@ -140,11 +142,11 @@ namespace NATSUnitTests
                 typeof(NATSConnectionClosedException));
 
             UnitTestUtilities.testExpectedException(
-                () => { c.QueueSubscribeAsync("foo", "bar"); },
+                () => { c.SubscribeAsync("foo", "bar"); },
                 typeof(NATSConnectionClosedException));
 
             UnitTestUtilities.testExpectedException(
-                () => { c.QueueSubscribeSync("foo", "bar"); }, 
+                () => { c.SubscribeSync("foo", "bar"); }, 
                 typeof(NATSConnectionClosedException));
 
             UnitTestUtilities.testExpectedException(

@@ -1,9 +1,15 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Text;
 
 namespace NATS.Client
 {
-    // Msg is a structure used by Subscribers and PublishMsg().
+    /// <summary>
+    /// A NATS message is an object encapsulating a subject, optional reply
+    /// payload, and subscription information, sent or received by teh client
+    /// application.
+    /// </summary>
     public sealed class Msg
     {
         private string subject;
@@ -66,21 +72,15 @@ namespace NATS.Client
             init(subject, null, null);
         }
 
-        internal Msg(MsgArg arg, Subscription s, byte[] data)
+        internal Msg(MsgArg arg, Subscription s, byte[] payload, long length)
         {
-            this.subject = new String(arg.subject.ToCharArray());
-
-            if (arg.reply != null)
-            {
-                this.reply = new String(arg.reply.ToCharArray());
-            }
-
-            this.sub = s;
+            this.subject = arg.subject;
+            this.reply   = arg.reply;
+            this.sub     = s;
 
             // make a deep copy of the bytes for this message.
-            long len = data.Length;
-            this.data = new byte[len];
-            Array.Copy(data, this.data, len);
+            this.data = new byte[length];
+            Array.Copy(payload, this.data, length);
         }
 
         /// <summary>
@@ -109,7 +109,6 @@ namespace NATS.Client
         /// buffer.
         /// </remarks>
         /// <see cref="AssignData"/>
-        /// 
         public byte[] Data
         {
             get { return data; }
@@ -155,6 +154,10 @@ namespace NATS.Client
             get { return sub; }
         }
 
+        /// <summary>
+        /// Generates a string representation of the messages.
+        /// </summary>
+        /// <returns>A string representation of the messages.</returns>
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();

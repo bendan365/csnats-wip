@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.IO;
@@ -122,22 +124,25 @@ namespace NATS.Client
 
         private Uri             url     = null;
         private LinkedList<Srv> srvPool = new LinkedList<Srv>();
+
+        // we have a buffered reader for writing, and reading.
+        // This is for both performance, and having to work around
+        // interlinked read/writes (supported by the underlying network
+        // stream, but not the BufferedStream).
         private BufferedStream  bw      = null;
+        private BufferedStream  br      = null;
         private MemoryStream    pending = null;
 
-        // flush channel
-        private Channel<bool>   fch      = new Channel<bool>();
-
-        // ping channel
-        private Channel<bool>  pingChannel = new Channel<bool>();
+        Object flusherLock     = new Object();
+        bool   flusherKicked = false;
+        bool   flusherDone     = false;
 
         private ServerInfo     info = null;
         private Int64          ssid = 0;
 
         private ConcurrentDictionary<Int64, Subscription> subs = 
             new ConcurrentDictionary<Int64, Subscription>();
-
-        private Channel<Msg>         mch   = new Channel<Msg>(Defaults.flushChanSize);
+        
         private Queue<Channel<bool>> pongs = new Queue<Channel<bool>>();
 
         internal MsgArg   msgArgs = new MsgArg();
@@ -152,7 +157,6 @@ namespace NATS.Client
         System.Timers.Timer ptmr = null;
 
         int                 pout = 0;
-        int                 reconnects = 0;
 
         // Prepare static protocol messages to minimize encoding costs.
         private byte[] pingProtoBytes = null;
@@ -161,8 +165,8 @@ namespace NATS.Client
         private int    pongProtoBytesLen;
         private byte[] _CRLF_AS_BYTES = Encoding.UTF8.GetBytes(IC._CRLF_);
 
-        // Use a string builder to generate basic protocol messages.
-        StringBuilder publishSb = new StringBuilder(Defaults.scratchSize);
+        // Use a string builder to generate protocol messages.
+        StringBuilder   publishSb    = new StringBuilder(Defaults.scratchSize);
 
         TCPConnection conn = new TCPConnection();
 
@@ -173,14 +177,14 @@ namespace NATS.Client
             internal string op;
             internal string args;
 
-            static readonly internal char[] seperator = { ' ' };
+            static readonly internal char[] separator = { ' ' };
 
             // ensure this object is always created with a string.
             private Control() { }
 
             internal Control(string s)
             {
-                string[] parts = s.Split(seperator, 2);
+                string[] parts = s.Split(separator, 2);
 
                 if (parts.Length == 1)
                 {
@@ -223,14 +227,17 @@ namespace NATS.Client
             /// 
             Object        mu     = new Object();
             TcpClient     client = null;
-            NetworkStream stream = null;
+            NetworkStream writeStream = null;
+            NetworkStream readStream = null;
 
             internal void open(Srv s, int timeoutMillis)
             {
                 lock (mu)
                 {
-                    client = new TcpClient();
 
+                    client = new TcpClient(s.url.Host, s.url.Port);
+#if async_connect
+                    client = new TcpClient();
                     IAsyncResult r = client.BeginConnect(s.url.Host, s.url.Port, null, null);
 
                     if (r.AsyncWaitHandle.WaitOne(
@@ -240,13 +247,15 @@ namespace NATS.Client
                         throw new NATSConnectionException("Timeout");
                     }
                     client.EndConnect(r);
+#endif
 
                     client.NoDelay = false;  // TODO:  See how this works w/ flusher.
 
-                    client.ReceiveBufferSize = Defaults.defaultBufSize;
+                    client.ReceiveBufferSize = Defaults.defaultBufSize;// Defaults.defaultBufSize;
                     client.SendBufferSize    = Defaults.defaultBufSize;
 
-                    stream = client.GetStream();
+                    writeStream = client.GetStream();
+                    readStream = new NetworkStream(client.Client);
                 }
             }
 
@@ -276,14 +285,17 @@ namespace NATS.Client
                 lock (mu)
                 {
                     TcpClient c = client;
-                    NetworkStream s = stream;
+                    NetworkStream ws = writeStream;
+                    NetworkStream rs = readStream;
 
                     client = null;
-                    stream = null;
+                    writeStream = null;
+                    readStream = null;
 
                     try
                     {
-                        s.Dispose();
+                        rs.Dispose();
+                        ws.Dispose();
                         c.Close();
                     }
                     catch (Exception)
@@ -293,9 +305,14 @@ namespace NATS.Client
                 }
             }
 
-            internal BufferedStream getBufferedStream(int size)
+            internal BufferedStream getReadBufferedStream(int size)
             {
-                return new BufferedStream(stream, size);
+                return new BufferedStream(readStream, size);
+            }
+
+            internal BufferedStream getWriteBufferedStream(int size)
+            {
+                return new BufferedStream(writeStream, size);
             }
 
             internal bool Connected
@@ -313,10 +330,10 @@ namespace NATS.Client
             {
                 get
                 {
-                    if (stream == null)
+                    if (readStream == null)
                         return false;
 
-                    return stream.DataAvailable;
+                    return readStream.DataAvailable;
                 }
             }
         }
@@ -423,14 +440,24 @@ namespace NATS.Client
             if (s == null)
                 throw new NATSNoServersException("No servers are configured.");
 
-            if (s.reconnects >= Opts.MaxReconnect)
-                return null;
+            int num = srvPool.Count;
+            int maxReconnect = opts.MaxReconnect;
 
-            if (srvPool.Count == 1)
-                return s;
-
+            // remove the current server.
             srvPool.Remove(s);
-            srvPool.AddLast(s);
+
+            if (maxReconnect > 0 && s.reconnects < maxReconnect)
+            {
+                // if we haven't surpassed max reconnects, add it
+                // to try again.
+                srvPool.AddLast(s);
+            }
+
+            if (srvPool.Count <= 0)
+            {
+                this.url = null;
+                return null;
+            }
 
             Srv first = srvPool.First();
             this.url = first.url;
@@ -504,13 +531,14 @@ namespace NATS.Client
 
             conn.open(currentServer, opts.Timeout);
 
-            // TODO:  Does this work if the underlying tcp stream is dead?
             if (pending != null && bw != null)
             {
-                bw.CopyTo(pending);
+                // flush to the pending buffer;
+                bw.Flush();
             }
 
-            bw = conn.getBufferedStream(Defaults.defaultBufSize);
+            bw = conn.getWriteBufferedStream(Defaults.defaultBufSize * 6);
+            br = conn.getReadBufferedStream(Defaults.defaultBufSize * 6);
         }
 
         // makeSecureConn will wrap an existing Conn using TLS
@@ -526,10 +554,17 @@ namespace NATS.Client
         private void waitForExits()
         {
             // Kick old flusher forcefully.
-            fch.add(true);
+            setFlusherDone(true);
+            kickFlusher();
 
             if (wg.Count > 0)
-                Task.WaitAll(this.wg.ToArray());
+            {
+                try
+                {
+                    Task.WaitAll(this.wg.ToArray());
+                }
+                catch (Exception) { }
+            }
         }
 
         private void spinUpSocketWatchers()
@@ -625,7 +660,7 @@ namespace NATS.Client
 
         private Queue<Channel<bool>> createPongs()
         {
-            Queue<Channel<bool>> rv = new Queue<Channel<bool>>(8);
+            Queue<Channel<bool>> rv = new Queue<Channel<bool>>();
             return rv;
         }
 
@@ -667,8 +702,9 @@ namespace NATS.Client
                     }
 
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
+                    lastEx = e;
                     close(ConnState.DISCONNECTED, false);
                     lock (mu)
                     {
@@ -767,7 +803,6 @@ namespace NATS.Client
             lock (mu)
             {
                 bw.Write(value, 0, length);
-                kickFlusher();
             }
         }
 
@@ -827,7 +862,7 @@ namespace NATS.Client
             string result = null;
             try
             {
-                StreamReader sr = new StreamReader(bw);
+                StreamReader sr = new StreamReader(br);
                 result = sr.ReadLine();
 
                 // Do not close or dispose the stream reader; 
@@ -874,7 +909,7 @@ namespace NATS.Client
             //
             // Do not close or dispose the stream reader - we need the underlying
             // BufferedStream.
-            StreamReader sr = new StreamReader(bw);
+            StreamReader sr = new StreamReader(br);
             return new Control(sr.ReadLine());
         }
 
@@ -896,25 +931,23 @@ namespace NATS.Client
         {
             lock (mu)
             {
-                if (!isClosed())
+                // If we are already in the proper state, just return.
+                if (isReconnecting())
+                    return;
+
+                status = ConnState.RECONNECTING;
+
+                if (ptmr != null)
                 {
-                    // If we are already in the proper state, just return.
-                    if (isReconnecting())
-                        return;
-
-                    status = ConnState.RECONNECTING;
-                    if (ptmr != null)
-                        ptmr.Stop();
-
-                    if (conn.isSetup())
-                    {
-                        bw.Flush();
-                        conn.teardown();
-                    }
-
-                    // TODO:  need to hold onto task?
-                    new Task(() => { doReconnect(); }).Start();
+                    ptmr.Stop();
                 }
+
+                if (conn.isSetup())
+                {
+                    conn.teardown();
+                }
+
+                new Task(() => { doReconnect(); }).Start();
             }
         }
 
@@ -926,7 +959,10 @@ namespace NATS.Client
                 return;
 
             if (pending.Length > 0)
-                pending.CopyTo(bw);
+            {
+                bw.Write(pending.GetBuffer(), 0, (int)pending.Length);
+                bw.Flush();
+            }
 
             pending = null;
         }
@@ -938,6 +974,8 @@ namespace NATS.Client
             // We want to make sure we have the other watchers shutdown properly
             // here before we proceed past this point
             waitForExits();
+
+
 
             // FIXME(dlc) - We have an issue here if we have
             // outstanding flush points (pongs) and they were not
@@ -955,13 +993,23 @@ namespace NATS.Client
             if (Opts.DisconnectedEventHandler != null)
             {
                 Monitor.Exit(mu);
-                Opts.DisconnectedEventHandler(this, new ConnEventArgs(this));
+
+                try
+                {
+                    Opts.DisconnectedEventHandler(this,
+                        new ConnEventArgs(this));
+                }
+                catch (Exception) { }
+
                 Monitor.Enter(mu);
             }
 
             Srv s;
             while ((s = selectNextServer()) != null)
             {
+                if (lastEx != null)
+                    break;
+
                 // Sleep appropriate amount of time before the
                 // connection attempt if connecting to same server
                 // we just got disconnected from.
@@ -975,9 +1023,19 @@ namespace NATS.Client
                     Thread.Sleep((int)sleepTime);
                     Monitor.Enter(mu);
                 }
+                else
+                {
+                    // Yield so other things like unsubscribes can
+                    // proceed.
+                    Monitor.Exit(mu);
+                    Thread.Sleep((int)50);
+                    Monitor.Enter(mu);
+                }
 
                 if (isClosed())
                     break;
+
+                s.reconnects++;
 
                 try
                 {
@@ -988,26 +1046,28 @@ namespace NATS.Client
                 {
                     // not yet connected, retry and hold
                     // the lock.
-                    s.reconnects++;
                     continue;
                 }
 
-
+                // We are reconnected.
+                stats.reconnects++;
 
                 // Clear out server stats for the server we connected to..
                 s.didConnect = true;
-                s.reconnects = 0;
 
                 // process our connect logic
                 try
                 {
                     processConnectInit();
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
+                    lastEx = e;
                     status = ConnState.RECONNECTING;
                     continue;
                 }
+
+                s.reconnects = 0;
 
                 // Process Connect logic
                 try
@@ -1018,7 +1078,7 @@ namespace NATS.Client
                     // Now send off and clear pending buffer
                     flushReconnectPendingItems();
 
-                    pending = null;
+                    // we are connected.
                     status = ConnState.CONNECTED;
                 }
                 catch (Exception)
@@ -1028,7 +1088,7 @@ namespace NATS.Client
                 }
 
                 // get the event handler under the lock
-                ConnEventHandler eh = Opts.ReconnectedEventHandler;
+                ConnEventHandler reconnectedEh = Opts.ReconnectedEventHandler;
 
                 // Release the lock here, we will return below
                 Monitor.Exit(mu);
@@ -1036,43 +1096,58 @@ namespace NATS.Client
                 // flush everything
                 Flush();
 
-                if (eh != null)
-                    eh(this, new ConnEventArgs(this));
+                if (reconnectedEh != null)
+                {
+                    try
+                    {
+                        reconnectedEh(this, new ConnEventArgs(this));
+                    }
+                    catch (Exception) { }
+                }
 
                 return;
 
             }
 
+            // we have no more servers left to try.
             if (lastEx == null)
                 lastEx = new NATSNoServersException("Unable to reconnect");
 
             Monitor.Exit(mu);
+
             Close();
+        }
+
+        private bool isConnecting()
+        {
+            return (status == ConnState.CONNECTING);
         }
 
         private void processOpError(Exception e)
         {
-            bool allowReconnect = false;
+            bool disconnected = false;
 
             lock (mu)
             {
-                if (isClosed() || isReconnecting())
+                if (isConnecting() || isClosed() || isReconnecting())
+                {
                     return;
+                }
 
-                allowReconnect = (Opts.AllowReconnect && status == ConnState.CONNECTED);
-            }
-
-            if (allowReconnect)
-            {
-                processReconnect();
-            }
-            else
-            {
-                lock (mu)
+                if (Opts.AllowReconnect && status == ConnState.CONNECTED)
+                {
+                    processReconnect();
+                }
+                else
                 {
                     processDisconnect();
+                    disconnected = true;
                     lastEx = e;
                 }
+            }
+
+            if (disconnected)
+            {
                 Close();
             }
         }
@@ -1080,7 +1155,7 @@ namespace NATS.Client
         private void readLoop()
         {
             // Stack based buffer.
-            byte[] buffer = new byte[Defaults.defaultBufSize];
+            byte[] buffer = new byte[Defaults.defaultReadLength];
             Parser parser = new Parser(this);
             int    len;
             bool   sb;
@@ -1097,7 +1172,7 @@ namespace NATS.Client
 
                 try
                 {
-                    len = bw.Read(buffer, 0, Defaults.defaultBufSize);
+                    len = br.Read(buffer, 0, Defaults.defaultReadLength);
                     parser.parse(buffer, len);
                 }
                 catch (Exception e)
@@ -1131,14 +1206,12 @@ namespace NATS.Client
                 }
 
                 // TODO:  performance - batch messages?  get all and loop
-                try
-                {
-                    m = ch.get();
-                }
-                catch (InvalidOperationException)
+ 
+                m = ch.get(-1);
+                if (m == null)
                 {
                     // the channel has been closed, exit silently.
-                    break;
+                    return;
                 }
 
                 // Note, this seems odd message having the sub process itself, 
@@ -1153,12 +1226,30 @@ namespace NATS.Client
             }
         }
 
-        internal void processMsgArgs(MemoryStream argBuffer)
+        // Roll our own fast conversion - we know it's the right
+        // encoding.
+        char[] convertToStrBuf = new char[Defaults.scratchSize];
+
+        private string convertToString(byte[] buffer, long length)
         {
+            for (int i = 0; i < length; i++)
+            {
+                convertToStrBuf[i] = (char)buffer[i];
+            }
 
-            String s = System.Text.Encoding.UTF8.GetString(
-                argBuffer.ToArray(), 0, (int)argBuffer.Position);
+            /// This is the copy operation for msg arg strings.
+            return new String(convertToStrBuf, 0, (int)length);
+        }
 
+        // Here we go ahead and convert the message args into
+        // strings, numbers, etc.  The msgArg object is a temporary
+        // place to hold them, until we create the message.
+        //
+        // These strings, once created, are never copied.
+        //
+        internal void processMsgArgs(byte[] buffer, long length)
+        {
+            string s = convertToString(buffer, length);
             string[] args = s.Split(' ');
 
             switch (args.Length)
@@ -1190,18 +1281,15 @@ namespace NATS.Client
         // appropriate channel for processing. All subscribers have their
         // their own channel. If the channel is full, the connection is
         // considered a slow subscriber.
-        internal void processMsg(MemoryStream msgStream)
+        internal void processMsg(byte[] msg, long length)
         {
             bool maxReached = false;
             Subscription s;
 
-            byte[] msg       = msgStream.ToArray();
-            long   byteCount = msgStream.Position;
-
             lock (mu)
             {
                 stats.inMsgs++;
-                stats.inBytes += byteCount;
+                stats.inBytes += length;
 
                 // In regular message processing, the key should be present,
                 // so optimize by using an an exception to handle a missing key.
@@ -1218,13 +1306,10 @@ namespace NATS.Client
 
                 lock (s.mu)
                 {
-                    maxReached = s.tallyMessage(byteCount);
+                    maxReached = s.tallyMessage(length);
                     if (maxReached == false)
                     {
-                        byte[] msgCopy = new byte[byteCount];
-                        Array.Copy(msg, msgCopy, byteCount);
-
-                        if (!s.addMessage(new Msg(msgArgs, s, msgCopy), opts.subChanLen))
+                        if (!s.addMessage(new Msg(msgArgs, s, msg, length), opts.subChanLen))
                         {
                             processSlowConsumer(s);
                         }
@@ -1253,10 +1338,59 @@ namespace NATS.Client
             s.sc = true;
         }
 
+        private void kickFlusher()
+        {
+            lock (flusherLock)
+            {
+                flusherKicked = true;
+                Monitor.Pulse(flusherLock);
+            }
+        }
+
+        private bool waitForFlusherKick()
+        {
+            lock (flusherLock)
+            {
+                if (flusherDone == true)
+                    return false;
+
+                // if kicked before we get here meantime, skip
+                // waiting.
+                if (!flusherKicked)
+                {
+                    Monitor.Wait(flusherLock);
+                }
+
+                flusherKicked = false;
+            }
+
+            return true;
+        }
+
+        private void setFlusherDone(bool value)
+        {
+            lock (flusherLock)
+            {
+                flusherDone = value;
+
+                if (flusherDone)
+                    kickFlusher();
+            }
+        }
+
+        private bool isFlusherDone()
+        {
+            lock (flusherLock)
+            {
+                return flusherDone;
+            }
+        }
+
         // flusher is a separate task that will process flush requests for the write
         // buffer. This allows coalescing of writes to the underlying socket.
         private void flusher()
         {
+            setFlusherDone(false);
             // TODO:  If there are problems here, then 
             // look at the Go code.  First .NET attempt
             // is to be much simpler.
@@ -1265,9 +1399,9 @@ namespace NATS.Client
                 return;
             }
 
-            while (!fch.isComplete())
+            while (!isFlusherDone())
             {
-                bool val = fch.get();
+                bool val = waitForFlusherKick();
                 if (val == false)
                     return;
 
@@ -1294,6 +1428,7 @@ namespace NATS.Client
         // messages. We use pings for the flush mechanism as well.
         internal void processPong()
         {
+            //System.Console.WriteLine("COLIN:  Processing pong.");
             Channel<bool> ch = null;
             lock (mu)
             {
@@ -1369,12 +1504,14 @@ namespace NATS.Client
             }
         }
 
-        // kickFlusher will send a bool on a channel to kick the
-        // flush method to flush data to the server.
-        private void kickFlusher()
+        private void writeString(BufferedStream stream, string value)
         {
-            if (bw != null)
-                fch.add(true);
+            char[] chars = value.ToCharArray();
+            long len = chars.Length;
+            for (int i = 0; i < len; i++)
+            {
+                stream.WriteByte((byte)chars[i]);
+            }
         }
 
         // publish is the internal function to publish messages to a nats-server.
@@ -1404,23 +1541,27 @@ namespace NATS.Client
                 if (lastEx != null)
                     throw lastEx;
 
-
-                // TODO:  Initial code.  Performance test this.  .NET is very performant at
-                // concatenation of 3 or 4 small strings, but more than 
-                // that, string builder is better.  Combine both
-                // for performance.  Stringbuilder makes a copy, but we're 
-                // stuck with that unless 
+                // .NET is very performant using string builder.
                 publishSb.Clear();
 
-                publishSb.Append(IC._PUB_P_ + " " + subject + " ");
-
-                if (string.IsNullOrWhiteSpace(reply) == false)
-                    publishSb.Append(reply + " ");
+                if (reply == null)
+                {
+                    publishSb.Append(IC._PUB_P_);
+                    publishSb.Append(" ");
+                    publishSb.Append(subject);
+                    publishSb.Append(" ");
+                }
+                else
+                {
+                    publishSb.Append(IC._PUB_P_ + " " + subject + " " +
+                        reply + " ");
+                }
 
                 publishSb.Append(msgSize);
                 publishSb.Append(IC._CRLF_);
 
-                writeString(publishSb.ToString());
+                byte[] sendBytes = System.Text.Encoding.UTF8.GetBytes(publishSb.ToString());
+                bw.Write(sendBytes, 0, sendBytes.Length);
 
                 if (msgSize > 0)
                 {
@@ -1511,10 +1652,9 @@ namespace NATS.Client
                 if (!isReconnecting())
                 {
                     writeString(IC.subProto, s.Subject, s.Queue, s.sid);
+                    kickFlusher();
                 }
             }
-
-            kickFlusher();
         }
 
         private void addSubscription(Subscription s)
@@ -1578,12 +1718,12 @@ namespace NATS.Client
             return subscribeAsync(subject, null);
         }
 
-        public ISyncSubscription QueueSubscribeSync(string subject, string queue)
+        public ISyncSubscription SubscribeSync(string subject, string queue)
         {
             return subscribeSync(subject, queue);
         }
 
-        public IAsyncSubscription QueueSubscribeAsync(string subject, string queue)
+        public IAsyncSubscription SubscribeAsync(string subject, string queue)
         {
             return subscribeAsync(subject, queue);
         }
@@ -1613,6 +1753,8 @@ namespace NATS.Client
                     removeSub(s);
                 }
 
+                // We will send all subscriptions when reconnecting
+                // so that we can supress here.
                 if (!isReconnecting())
                     writeString(IC.unsubProto, s.sid, max);
 
@@ -1716,17 +1858,18 @@ namespace NATS.Client
                     "timeout");
             }
 
+            Channel<bool> ch = new Channel<bool>(1);
             lock (mu)
             {
                 if (isClosed())
                     throw new NATSConnectionClosedException();
 
-                sendPing(pingChannel);
+                sendPing(ch);
             }
 
             try
             {
-                bool rv = pingChannel.get(timeout);
+                bool rv = ch.get(timeout);
                 if (!rv)
                 {
                     lastEx = new NATSConnectionClosedException();
@@ -1743,7 +1886,7 @@ namespace NATS.Client
 
             if (lastEx != null)
             {
-                removeFlushEntry(pingChannel);
+                removeFlushEntry(ch);
                 throw lastEx;
             }
         }
@@ -1755,7 +1898,7 @@ namespace NATS.Client
         public void Flush()
         {
             // 60 second default.
-            Flush((int)Opts.Timeout);
+            Flush(60000);
         }
 
         // resendSubscriptions will send our subscription state back to the
@@ -1764,10 +1907,15 @@ namespace NATS.Client
         {
             foreach (Subscription s in subs.Values)
             {
+                if (s is IAsyncSubscription)
+                    ((AsyncSubscription)s).enableAsyncProcessing();
+                
+
                 writeString(IC.subProto, s.Subject, s.Queue, s.sid);
             }
 
             // TODO:  no flush?
+            bw.Flush();
         }
 
 
@@ -1865,7 +2013,11 @@ namespace NATS.Client
 
             if (invokeDelegates && closedEventHandler != null)
             {
-                closedEventHandler(this, new ConnEventArgs(this));
+                try
+                {
+                    closedEventHandler(this, new ConnEventArgs(this));
+                }
+                catch (Exception) { }
             }
 
             lock (mu)
@@ -1956,6 +2108,11 @@ namespace NATS.Client
             }
         }
 
+        /// <summary>
+        /// Returns a string representation of the
+        /// value of this Connection instance.
+        /// </summary>
+        /// <returns>String value of this instance.</returns>
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();

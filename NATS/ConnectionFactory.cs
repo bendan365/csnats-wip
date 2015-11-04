@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,8 +8,14 @@ using System.Threading.Tasks;
 
 namespace NATS.Client
 {
+    /// <summary>
+    /// Creates a connection to the NATS server.
+    /// </summary>
     public sealed class ConnectionFactory
     {
+        /// <summary>
+        /// Creates a connection factory to the NATS server.
+        /// </summary>
         public ConnectionFactory() { }
 
         /// <summary>
@@ -24,11 +32,8 @@ namespace NATS.Client
         }
 
         /// <summary>
-        /// Connect will attempt to connect to the NATS server.
-        /// The url can contain username/password semantics.
+        /// Retrieves the default set ot client options.
         /// </summary>
-        /// <param name="url">The url</param>
-        /// <returns>A new connection to the NATS server</returns>
         public static Options GetDefaultOptions()
         {
             return new Options();
@@ -36,7 +41,7 @@ namespace NATS.Client
 
         /// <summary>
         /// SecureConnect will attempt to connect to the NATS server using TLS.
-        //. The url can contain username/password semantics.
+        /// The url can contain username/password semantics.
         /// </summary>
         /// <param name="url">connect url</param>
         /// <returns>A new connection to the NATS server</returns>

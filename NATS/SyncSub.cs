@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -44,7 +46,7 @@ namespace NATS.Client
             }
             else
             {
-                msg = localChannel.get();
+                msg = localChannel.get(-1);
             }
 
             if (msg != null)

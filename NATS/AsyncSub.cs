@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,7 +22,7 @@ namespace NATS.Client
     public sealed class AsyncSubscription : Subscription, IAsyncSubscription, ISubscription
     {
 
-        private MsgHandler          msgHandler = null;
+        public MsgHandler          msgHandler = null;
         private MsgHandlerEventArgs msgHandlerArgs = new MsgHandlerEventArgs();
         private Task                msgFeeder = null;
 
@@ -52,18 +54,28 @@ namespace NATS.Client
             if (max <= 0 || d <= max)
             {
                 msgHandlerArgs.msg = msg;
-                msgHandler(this, msgHandlerArgs);
-            }
-            else
-            {
-                Unsubscribe();
-                this.conn = null;
+                try
+                {
+                    msgHandler(this, msgHandlerArgs);
+                }
+                catch (Exception) { }
+
+                if (d == max)
+                {
+                    Unsubscribe();
+                    this.conn = null;
+                }
             }
 
             return true;
         }
 
-        private void enableAsyncProcessing()
+        internal bool isStarted()
+        {
+            return (msgFeeder != null);
+        }
+
+        internal void enableAsyncProcessing()
         {
             if (msgFeeder == null)
             {
@@ -72,15 +84,12 @@ namespace NATS.Client
             }
         }
 
-        private void disableAsyncProcessing()
+        internal void disableAsyncProcessing()
         {
-            if (msgHandler != null)
-                return;
-
             if (msgFeeder != null)
             {
-                mch.close();
-                msgFeeder.Wait();
+                mch.close();               
+                msgFeeder = null;
             }
         }
 
@@ -106,6 +115,9 @@ namespace NATS.Client
         /// </summary>
         public void Start()
         {
+            if (isStarted())
+                return;
+
             if (conn == null)
                 throw new NATSBadSubscriptionException();
 
@@ -117,6 +129,14 @@ namespace NATS.Client
         {
             disableAsyncProcessing();
             base.Unsubscribe();
+        }
+
+        public override void AutoUnsubscribe(int max)
+        {
+            if (!isStarted())
+                Start();
+
+            base.AutoUnsubscribe(max);
         }
     }
 }

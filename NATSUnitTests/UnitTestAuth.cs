@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NATS.Client;
 
@@ -70,11 +72,9 @@ namespace NATSUnitTests
             {
                 using (NATSServer s = util.CreateServerWithConfig("auth_1222.conf"))
                 {
-                   // connectAndFail("nats://username@localhost:1222");
+                    connectAndFail("nats://username@localhost:1222");
                     connectAndFail("nats://username:badpass@localhost:1222");
                     connectAndFail("nats://localhost:1222");
-
-                    // FIXME - this one fails.
                     connectAndFail("nats://badname:password@localhost:1222");
                 }
 

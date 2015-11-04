@@ -1,4 +1,6 @@
-﻿using System;
+﻿// Copyright 2015 Apcera Inc. All rights reserved.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -21,6 +23,7 @@ namespace NATSUnitTests
         {
             ProcessStartInfo psInfo = createProcessStartInfo();
             this.p = Process.Start(psInfo);
+            Thread.Sleep(500);
         }
 
         private void addArgument(ProcessStartInfo psInfo, string arg)
@@ -42,11 +45,6 @@ namespace NATSUnitTests
             ProcessStartInfo psInfo = createProcessStartInfo();
 
             addArgument(psInfo, "-p " + port);
-
-            if (debug)
-            {
-                System.Console.WriteLine(psInfo);
-            }
 
             this.p = Process.Start(psInfo);
         }
