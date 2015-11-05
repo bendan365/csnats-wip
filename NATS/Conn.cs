@@ -82,7 +82,6 @@ namespace NATS.Client
             value.Trim();
 
             // trim off the quotes.
-            int len = key.Length - 1;
             key = key.Substring(1, key.Length - 2);
 
             // bools and numbers may not have quotes.
@@ -522,20 +521,29 @@ namespace NATS.Client
         // createConn will connect to the server and wrap the appropriate
         // bufio structures. It will do the right thing when an existing
         // connection is in place.
-        private void createConn()
+        private bool createConn()
         {
             currentServer.updateLastAttempt();
 
-            conn.open(currentServer, opts.Timeout);
-
-            if (pending != null && bw != null)
+            try
             {
-                // flush to the pending buffer;
-                bw.Flush();
+                conn.open(currentServer, opts.Timeout);
+
+                if (pending != null && bw != null)
+                {
+                    // flush to the pending buffer;
+                    bw.Flush();
+                }
+
+                bw = conn.getWriteBufferedStream(Defaults.defaultBufSize * 6);
+                br = conn.getReadBufferedStream(Defaults.defaultBufSize * 6);
+            }
+            catch (Exception)
+            {
+                return false;
             }
 
-            bw = conn.getWriteBufferedStream(Defaults.defaultBufSize * 6);
-            br = conn.getReadBufferedStream(Defaults.defaultBufSize * 6);
+            return true;
         }
 
         // makeSecureConn will wrap an existing Conn using TLS
@@ -685,16 +693,18 @@ namespace NATS.Client
                 this.url = s.url;
                 try
                 {
+                    lastEx = null;
                     lock (mu)
                     {
-                        createConn();
+                        if (createConn())
+                        {
+                            s.didConnect = true;
+                            s.reconnects = 0;
 
-                        s.didConnect = true;
-                        s.reconnects = 0;
+                            processConnectInit();
 
-                        processConnectInit();
-
-                        connected = true;
+                            connected = true;
+                        }
                     }
 
                 }
@@ -771,7 +781,7 @@ namespace NATS.Client
 
             if (!IC._INFO_OP_.Equals(c.op))
             {
-                throw new NATSConnectionException("nats: Protocol exception, INFO not received");
+                throw new NATSConnectionException("Protocol exception, INFO not received");
             }
 
             processInfo(c.args);
@@ -1336,8 +1346,10 @@ namespace NATS.Client
         {
             lock (flusherLock)
             {
+                if (!flusherKicked)
+                    Monitor.Pulse(flusherLock);
+
                 flusherKicked = true;
-                Monitor.Pulse(flusherLock);
             }
         }
 
@@ -1492,16 +1504,6 @@ namespace NATS.Client
                 }
 
                 close(ConnState.CLOSED, invokeDelegates);
-            }
-        }
-
-        private void writeString(BufferedStream stream, string value)
-        {
-            char[] chars = value.ToCharArray();
-            long len = chars.Length;
-            for (int i = 0; i < len; i++)
-            {
-                stream.WriteByte((byte)chars[i]);
             }
         }
 

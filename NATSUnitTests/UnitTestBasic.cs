@@ -618,13 +618,28 @@ namespace NATSUnitTests
                 for (int i = 0; i < msgSize; i++)
                     msg[i] = (byte)'A';
 
-                using (ISyncSubscription s = c.SubscribeSync("foo"))
+                using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
+                    Object testLock = new Object();
+
+                    s.MessageHandler += (sender, args) =>
+                    {
+                        lock(testLock)
+                        {
+                            Monitor.Pulse(testLock);
+                        }
+                        Assert.IsTrue(compare(msg, args.Message.Data));
+                    };
+
+                    s.Start();
+
                     c.Publish("foo", msg);
                     c.Flush(2000);
 
-                    Msg m = s.NextMessage();
-                    Assert.IsTrue(compare(msg, m.Data));
+                    lock(testLock)
+                    {
+                        Monitor.Wait(testLock, 2000);
+                    }
                 }
             }
         }

@@ -317,7 +317,7 @@ namespace NATSUnitTests
                         {
                             c.Publish("foo", null);
                         }
-                        c.Flush();
+                        c.Flush(1000);
 
                         Assert.IsTrue(Monitor.Wait(testLock, 1000));
                     }
