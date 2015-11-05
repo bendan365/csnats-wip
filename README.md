@@ -298,9 +298,26 @@ Other events can be assigned delegate methods through the options object.
             IConnection c = new ConnectionFactory().CreateConnection(opts);
 ```
 
+## Exceptions
+
+The NATS .NET client can throw the following exceptions:
+
+* NATSException - The generic NATS exception, and base class for all other NATS exception.
+* NATSConnectionException - The exception that is thrown when there is a connection error.
+* NATSProtocolException -  This exception that is thrown when there is an internal error with the NATS protocol.
+* NATSNoServersException - The exception that is thrown when a connection cannot be made to any server.
+* NATSSecureConnRequiredException - The exception that is thrown when a secure connection is required.
+* NATSConnectionClosedException - The exception that is thrown when a an operation is performed on a connection that is closed.
+* NATSSlowConsumerException - The exception that is thrown when a consumer (subscription) is slow.
+* NATSStaleConnectionException - The exception that is thrown when an operation occurs on a connection that has been determined to be stale.
+* NATSMaxPayloadException - The exception that is thrown when a message payload exceeds what the maximum configured.
+* NATSBadSubscriptionException - The exception that is thrown when a subscriber operation is performed on an invalid subscriber.
+* NATSTimeoutException - The exception that is thrown when a NATS operation times out.
+
+## Miscellaneous 
 Known Issues
+* Some unit tests are incomplete or fail.  This is due to long connect times with the underlying .NET TCPClient API, issues with the tests themselves, or bugs (This IS an alpha).
 * There can be an issue with a flush hanging in some situations.  I'm looking into it.
-* Some unit tests are failing due to long connect times due to the underlying .NET TCPClient API.
 
 TODO
 * API documentation
