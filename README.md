@@ -286,7 +286,7 @@ Other events can be assigned delegate methods through the options object.
 ```C#
             string[] servers = new string[] {
                 "nats://localhost:1222",
-		"nats://localhost:1224"
+                "nats://localhost:1224"
             };
 
             Options opts = ConnectionFactory.GetDefaultOptions();
