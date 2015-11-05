@@ -50,63 +50,87 @@ All examples provide statistics for benchmarking.
 
 NATS .NET C# Client uses interfaces to reference most NATS client objects, and delegates for all types of events.
 
-### Creating a Nats C# The steps to create a NATS application are:
+### Creating a NATS .NET Application
 
-First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
+First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.  While the NATS client is written in C#, any .NET langage can use it.
+
+Below is some code demonstrating basic API usage.  Note that this is example code, not functional as a whole (e.g. requests will fail without a subscriber to reply). 
+
 ```C#
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+// Reference the NATS client.
 using NATS.Client;
 ```
 
-Next create a connection factory
+Here are example snippets of using the API to create a connection, subscribe, publish, and request data.
+
 ```C#
-ConnectionFactory cf = new ConnectionFactory();
+            // Create a new connection factory to create
+            // a connection.
+            ConnectionFactory cf = new ConnectionFactory();
+
+            // Creates a live connection to the default
+            // NATS Server running locally
+            IConnection c = cf.CreateConnection();
+
+            // Simple asynchronous subscriber on subject foo
+            IAsyncSubscription sAsync = c.SubscribeAsync("foo");
+
+            // Assign a message handler.  An anonymous delegate function
+            // is used for brevity.
+            sAsync.MessageHandler += (sender, msgArgs) =>
+            {
+                // print the message
+                Console.WriteLine(msgArgs.Message);
+
+                // Here are some of the accessible properties from
+                // the message:
+                // msgArgs.Message.Data;
+                // msgArgs.Message.Reply;
+                // msgArgs.Message.Subject;
+                // msgArgs.Message.ArrivalSubcription.Subject;
+                // msgArgs.Message.ArrivalSubcription.QueuedMessageCount;
+                // msgArgs.Message.ArrivalSubcription.Queue;
+
+                // Unsubscribing from within the delegate function is supported.
+                msgArgs.Message.ArrivalSubcription.Unsubscribe();
+            };
+
+            // Start the subscriber.  Asycnronous subscribers have a
+            // method to start receiving data.  This allows the message handler
+            // to be setup before data starts arriving; important if multicasting
+            // delegates.
+            sAsync.Start();
+
+            // Simple synchronous subscriber
+            ISyncSubscription sSync = c.SubscribeSync("foo");
+
+            // Using a synchronous subscriber, gets the first message available,
+            // waiting up to 1000 milliseconds (1 second)
+            Msg m = sSync.NextMessage(1000);
+
+            c.Publish("foo", Encoding.UTF8.GetBytes("hello world"));
+
+            // Unsubscribing
+            sAsync.Unsubscribe();
+
+            // Publish requests to the given reply subject:
+            c.Publish("foo", "bar", Encoding.UTF8.GetBytes("help!"));
+
+            // Sends a request (internally creates an inbox) and Auto-Unsubscribe the
+            // internal subscriber, which means that the subscriber is unsubscribed
+            // when receiving the first response from potentially many repliers.
+            // This call will wait for the reply for up to 1000 milliseconds (1 second).
+            m = c.Request("foo", Encoding.UTF8.GetBytes("help"), 1000);
+
+            // Closing a connection
+            c.Close();
 ```
-
-One can setup options by modifying a default set obtained from the factory.
-```C#
-Options opts = ConnectionFactory.GetDefaultOptions();
-```
-
-Create a connection.
-```C#
-IConnection c = cf.Connect(opts);
-```
-
-If using the default options, you can use the Connect() API instead.
-```C#
-IConnection c = cf.Connect();
-```
-
-To publish, call the IConnection.Publish(...) API.
-```C#
-byte[] data = Encoding.UTF8.GetBytes("hello");
-c.Publish("foo", data);
-```
-
-There are two types of subscribers, synchronous and asynchronous.
-To synchronously subscribe, then wait for a message:
-```C#
-ISyncSubscription s = c.SubscribeSync("foo");
-Msg m = s.NextMessage();
-Console.WriteLine("Received: " + m);
-```
-
-To asychronously receive, create an asychronous subscription and add
-a message handler.
-```C#
-IAsyncSubscription s = c.SubscribeAsync(subject))
-
-s.MessageHandler += (sender, args) =>
-{
-    Console.WriteLine("Received: " + args.Message);
-};
-
-s.Start();
-
-// Sleep for a minute and process messages.
-Thread.Sleep(60000);
-```
-Note the Start() method - Start() MUST be called to start receiving messages.  Adding a step to start the subscriber allows one to multicast delegates and ensure they will all be invoked when process messages.
 
 ## Wildcard Subscriptions
 
@@ -180,7 +204,7 @@ c.Close();
 Connection and Subscriber objects implement IDisposable and can be created in a using statement.  Here is all the code required to connect to a default server, receive ten messages, and clean up, unsubcribing and closing the connection when finished.
 
 ```C#
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -196,7 +220,7 @@ Connection and Subscriber objects implement IDisposable and can be created in a 
 Or to publish ten messages:
 
 ```C#
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 for (int i = 0; i < 10; i++)
                 {
@@ -252,7 +276,7 @@ Other events can be assigned delegate methods through the options object.
                 Console.WriteLine("   Server: " + args.Conn.ConnectedUrl);
             };
 
-            IConnection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().CreateConnection(opts);
 ```
 
 
@@ -262,7 +286,7 @@ Other events can be assigned delegate methods through the options object.
 ```C#
             string[] servers = new string[] {
                 "nats://localhost:1222",
-		"nats://localhost:1224"
+                "nats://localhost:1224"
             };
 
             Options opts = ConnectionFactory.GetDefaultOptions();
@@ -271,7 +295,7 @@ Other events can be assigned delegate methods through the options object.
             opts.NoRandomize = true;
             opts.Servers = servers;
             
-            IConnection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().CreateConnection(opts);
 ```
 
 Known Issues
