@@ -50,9 +50,12 @@ All examples provide statistics for benchmarking.
 
 NATS .NET C# Client uses interfaces to reference most NATS client objects, and delegates for all types of events.
 
-### Creating a Nats C# The steps to create a NATS application are:
+### Creating a NATS .NET Application
 
-First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
+First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.  While the NATS client is written in C#, any .NET langage can use it.
+
+Below  is a walkthough of the process:
+
 ```C#
 using NATS.Client;
 ```
@@ -69,12 +72,12 @@ Options opts = ConnectionFactory.GetDefaultOptions();
 
 Create a connection.
 ```C#
-IConnection c = cf.Connect(opts);
+IConnection c = cf.CreateConnection(opts);
 ```
 
 If using the default options, you can use the Connect() API instead.
 ```C#
-IConnection c = cf.Connect();
+IConnection c = cf.CreateConnection();
 ```
 
 To publish, call the IConnection.Publish(...) API.
@@ -180,7 +183,7 @@ c.Close();
 Connection and Subscriber objects implement IDisposable and can be created in a using statement.  Here is all the code required to connect to a default server, receive ten messages, and clean up, unsubcribing and closing the connection when finished.
 
 ```C#
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -196,7 +199,7 @@ Connection and Subscriber objects implement IDisposable and can be created in a 
 Or to publish ten messages:
 
 ```C#
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 for (int i = 0; i < 10; i++)
                 {
@@ -252,7 +255,7 @@ Other events can be assigned delegate methods through the options object.
                 Console.WriteLine("   Server: " + args.Conn.ConnectedUrl);
             };
 
-            IConnection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().CreateConnection(opts);
 ```
 
 
@@ -271,7 +274,7 @@ Other events can be assigned delegate methods through the options object.
             opts.NoRandomize = true;
             opts.Servers = servers;
             
-            IConnection c = new ConnectionFactory().Connect(opts);
+            IConnection c = new ConnectionFactory().CreateConnection(opts);
 ```
 
 Known Issues
