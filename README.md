@@ -19,7 +19,7 @@ Ensure you have installed the .NET Framework 4.0 or greater.  Set your path to i
 ```
 set PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319;%PATH%
 ```
-Then, build the assembly.  There is a simple batch file to build, requiring only the .NET framework SDK to be installed.
+Then, build the assembly.  There is a simple batch file, build.bat, that will build the assembly (NATS.Client.dll) and the provided examples with only requriing the  .NET framework SDK.
 
 ```
 build.bat
@@ -48,10 +48,9 @@ All examples provide statistics for benchmarking.
 
 ## Basic Usage
 
-NATS .NET uses interfaces to reference most NATS client objects, and delegates for all event.
+NATS .NET C# Client uses interfaces to reference most NATS client objects, and delegates for all types of events.
 
-
-The steps to create a NATS application are:
+### Creating a Nats C# The steps to create a NATS application are:
 
 First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
 ```C#
@@ -104,27 +103,65 @@ s.MessageHandler += (sender, args) =>
 
 s.Start();
 
-// Sleep for a minute and let NATS process messages.
+// Sleep for a minute and process messages.
 Thread.Sleep(60000);
 ```
 Note the Start() method - Start() MUST be called to start receiving messages.  Adding a step to start the subscriber allows one to multicast delegates and ensure they will all be invoked when process messages.
 
 ## Wildcard Subscriptions
 
-The NATS .NET client supports full wildcard subscriptions.
+The `*` wildcard matches any token, at any level of the subject:
+
+```c#
+IAsyncSubscription s = c.SubscribeAsync("foo.*.baz");
+```
+This subscriber would receive messages sent to:
+
+* foo.bar.baz
+* foo.a.baz
+* etc...
+
+It would not, however, receive messages on:
+
+* foo.baz
+* foo.baz.bar
+* etc...
+
+The `>` wildcard matches any length of the fail of a subject, and can only be the last token.
+
+```c#
+IAsyncSubscription s = c.SubscribeAsync("foo.>");
+```
+This subscriber would receive any message sent to:
+
+* foo.bar
+* foo.bar.baz
+* foo.foo.bar.bax.22
+* etc...
+
+However, it would not receive messages sent on:
+
+* foo
+* bar.foo.baz
+* etc...
+
+Publishing on this subject would cause the two above subscriber to receive the message:
+```c#
+c.Publish("foo.bar.baz", null);
+```
 
 ## Queue Groups
 
-Queue groups are created by creating a synchronous or asychronous subsciption using the API that provides a queue group name.
+All subscriptions with the same queue name will form a queue group. Each message will be delivered to only one subscriber per queue group, using queue sematics. You can have as many queue groups as you wish. Normal subscribers will continue to work as expected.
 
 ```C#
-ISyncSubscription s1 = c.SubscribeSync("foo", "group");
+ISyncSubscription s1 = c.SubscribeSync("foo", "job_workers");
 ```
 
 or
 
 ```C#
-IAsyncSubscription s = c.SubscribeAsync("foo", "group");
+IAsyncSubscription s = c.SubscribeAsync("foo", "job_workers");
 ```
 
 To unsubscribe, call the ISubscriber Unsubscribe method:
@@ -238,7 +275,7 @@ Other events can be assigned delegate methods through the options object.
 ```
 
 Known Issues
-* There can be an issue with a flush hanging in some situtions.  I'm looking into it.
+* There can be an issue with a flush hanging in some situations.  I'm looking into it.
 * Some unit tests are failing due to long connect times due to the underlying .NET TCPClient API.
 
 TODO
