@@ -23,7 +23,7 @@ build.bat
 ```
 The "quick start" batch file will create a bin directory, and copy all binary files, including samples, into it.
 
-The recommended alternative is to load NATS.sln into Visual Studio 2013 Express or better.  Later versions of Visual Studio should automatically upgrade the solution and project files for you.
+The recommended alternative is to load NATS.sln into Visual Studio 2013 Express or better.  Later versions of Visual Studio should automatically upgrade the solution and project files for you.  XML documenation is generated, so code completion, context help, etc, will be available in the editor.
 
 ### Project files
 
@@ -49,83 +49,93 @@ NATS .NET uses interfaces to reference most NATS client objects, and delegates f
 The steps to create a NATS application are:
 
 1)  First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
-```
+```C#
 using NATS.Client;
 ```
 
 2) Create a connection factory
-```
+```C#
 ConnectionFactory cf = new ConnectionFactory();
 ```
 
 3) Setup your options by modifying a default set obtained from the factory.
-```
+```C#
 Options opts = ConnectionFactory.GetDefaultOptions();
 ```
 
 4) Create a connection.
-```
+```C#
 IConnection c = cf.Connect(opts);
 ```
 
 If using the default options, you can use the Connect() API instead.
-```
+```C#
 IConnection c = cf.Connect();
 ```
 
 To publish, call the IConnection.Publish(...) API.
-```
+```C#
 byte[] data = Encoding.UTF8.GetBytes("hello");
 c.Publish("foo", data);
 ```
 
 There are two types of subscribers, synchronous and asynchronous.
 To synchronously subscribe, then wait for a message:
-```
+```C#
 ISyncSubscription s = c.SubscribeSync("foo");
 Msg m = s.NextMessage();
 Console.WriteLine("Received: " + m);
 ```
 
+To asychronously receive, create an asychronous subscription and add
+a message handler.
+```C#
+IAsyncSubscription s = c.SubscribeAsync(subject))
+
+s.MessageHandler += (sender, args) =>
+{
+    Console.WriteLine("Received: " + args.Message);
+};
+
+s.Start();
+
+// Sleep for a minute and let NATS process messages.
+Thread.Sleep(60000);
+```
+Note the Start() method - Start() MUST be called to start receiving messages.  Adding a step to start the subscriber allows one to multicast delegates and ensure they will all be invoked when process messages.
+
 ## Wildcard Subscriptions
 
-```go
-
-// "*" matches any token, at any level of the subject.
-nc.Subscribe("foo.*.baz", func(m *Msg) {
-    fmt.Printf("Msg received on [%s] : %s\n", m.Subject, string(m.Data));
-})
-
-nc.Subscribe("foo.bar.*", func(m *Msg) {
-    fmt.Printf("Msg received on [%s] : %s\n", m.Subject, string(m.Data));
-})
-
-// ">" matches any length of the tail of a subject, and can only be the last token
-// E.g. 'foo.>' will match 'foo.bar', 'foo.bar.baz', 'foo.foo.bar.bax.22'
-nc.Subscribe("foo.>", func(m *Msg) {
-    fmt.Printf("Msg received on [%s] : %s\n", m.Subject, string(m.Data));
-})
-
-// Matches all of the above
-nc.Publish("foo.bar.baz", []byte("Hello World"))
-
-```
+The NATS .NET client supports full wildcard subscriptions.
 
 ## Queue Groups
 
-```go
-// All subscriptions with the same queue name will form a queue group.
-// Each message will be delivered to only one subscriber per queue group,
-// using queuing semantics. You can have as many queue groups as you wish.
-// Normal subscribers will continue to work as expected.
+Queue groups are created by creating a synchronous or asychronous subsciption using the API that provides a queue group name.
 
-nc.QueueSubscribe("foo", "job_workers", func(_ *Msg) {
-  received += 1;
-})
+```C#
+ISyncSubscription s1 = c.SubscribeSync("foo", "group");
+```
+or
 
+```C#
+IAsyncSubscription s = c.SubscribeAsync("foo", "group");
 ```
 
+To unsubscribe, call the ISubscriber Unsubscribe method:
+```C#
+s.Unsubscribe();
+```
+
+When finished with NATS, clean up and free resources.
+```C#
+s.Close();
+c.Close();
+```
+
+
 ## Advanced Usage
+
+The Connection and Subscriber interfaces implement IDisposable, allowing one to use them in a using statement.  Here is a simple application that receives and prints
 
 ```go
 
