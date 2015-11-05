@@ -5,7 +5,7 @@
 REM Your version of csc.exe must be in the path.
 set PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319;%PATH%
 
-mkdir bin 2>/dev/nul
+mkdir bin 2>NUL
 
 cd NATS
 csc.exe /nologo /out:..\bin\NATS.Client.DLL /target:library /doc:NATS.XML /optimize+ *.cs Properties\*.cs
