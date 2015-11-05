@@ -45,7 +45,6 @@ namespace NATS.Client
         // tool for a minimal amount of parsing.
         internal ServerInfo(string jsonString)
         {
-            // TODO.  .NET json?
             string[] kv_pairs = jsonString.Split(',');
             foreach (string s in kv_pairs)
                 addKVPair(s);
@@ -149,8 +148,6 @@ namespace NATS.Client
 
         internal ConnState status = ConnState.CLOSED;
 
-        // TODO - look at error handling, hold on to the last Ex where
-        // the go client holds on to err.
         Exception lastEx;
 
         Parser              ps = null;
@@ -249,9 +246,9 @@ namespace NATS.Client
                     client.EndConnect(r);
 #endif
 
-                    client.NoDelay = false;  // TODO:  See how this works w/ flusher.
+                    client.NoDelay = false;
 
-                    client.ReceiveBufferSize = Defaults.defaultBufSize;// Defaults.defaultBufSize;
+                    client.ReceiveBufferSize = Defaults.defaultBufSize;
                     client.SendBufferSize    = Defaults.defaultBufSize;
 
                     writeStream = client.GetStream();
@@ -544,7 +541,6 @@ namespace NATS.Client
         // makeSecureConn will wrap an existing Conn using TLS
         private void makeTLSConn()
         {
-
             // TODO:  Notes... SSL for beta?  Encapsulate/overide writes to work with SSL and
             // standard streams.  Buffered writer with an SSL stream?
         }
@@ -1069,7 +1065,7 @@ namespace NATS.Client
 
                 s.reconnects = 0;
 
-                // Process Connect logic
+                // Process CreateConnection logic
                 try
                 {
                     // Send existing subscription state
@@ -1204,8 +1200,6 @@ namespace NATS.Client
                     if (isClosed())
                         return;
                 }
-
-                // TODO:  performance - batch messages?  get all and loop
  
                 m = ch.get(-1);
                 if (m == null)
@@ -1391,9 +1385,7 @@ namespace NATS.Client
         private void flusher()
         {
             setFlusherDone(false);
-            // TODO:  If there are problems here, then 
-            // look at the Go code.  First .NET attempt
-            // is to be much simpler.
+
             if (conn.Connected == false)
             {
                 return;
@@ -1468,7 +1460,6 @@ namespace NATS.Client
         {
             get
             {
-                // TODO:  return exception?  No equivalent?
                 return this.lastEx;
             }
         }
@@ -1537,7 +1528,6 @@ namespace NATS.Client
                 if (isClosed())
                     throw new NATSConnectionClosedException();
 
-                // TODO:  should this be here?  Need a global/fatal error
                 if (lastEx != null)
                     throw lastEx;
 
@@ -1680,8 +1670,8 @@ namespace NATS.Client
             return s;
         }
 
-        // subscribe is the internal subscribe function that indicates interest in a subject.
-        // TODO = do not start listening until a handler has been set.
+        // subscribe is the internal subscribe 
+        // function that indicates interest in a subject.
         private SyncSubscription subscribeSync(string subject, string queue)
         {
             SyncSubscription s = null;
@@ -1792,7 +1782,6 @@ namespace NATS.Client
             Channel<bool> start = pongs.Dequeue();
             Channel<bool> c = start;
 
-            // todo - use a different data structure.
             while (true)
             {
                 if (c == chan)
@@ -1914,7 +1903,6 @@ namespace NATS.Client
                 writeString(IC.subProto, s.Subject, s.Queue, s.sid);
             }
 
-            // TODO:  no flush?
             bw.Flush();
         }
 
@@ -1993,7 +1981,7 @@ namespace NATS.Client
                     Opts.DisconnectedEventHandler != null)
                 {
                     // TODO:  Mirror go, but this can result in a callback
-                    // being invoked out of order.  Why a go routine here?
+                    // being invoked out of order
                     disconnectedEventHandler = Opts.DisconnectedEventHandler;
                     new Task(() => { disconnectedEventHandler(this, new ConnEventArgs(this)); }).Start();
                 }

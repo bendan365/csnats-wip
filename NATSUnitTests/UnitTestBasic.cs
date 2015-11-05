@@ -32,7 +32,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestConnectedServer()
         {
-            IConnection c = new ConnectionFactory().Connect();
+            IConnection c = new ConnectionFactory().CreateConnection();
            
             string u = c.ConnectedUrl;
             
@@ -52,7 +52,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestMultipleClose()
         {
-            IConnection c = new ConnectionFactory().Connect();
+            IConnection c = new ConnectionFactory().CreateConnection();
             
             Task[] tasks = new Task[10];
 
@@ -83,7 +83,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSimplePublish()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 c.Publish("foo", Encoding.UTF8.GetBytes("Hello World!"));
             }
@@ -92,7 +92,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSimplePublishNoData()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 c.Publish("foo", null);
             }
@@ -142,7 +142,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestAsyncSubscribe()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -184,7 +184,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSyncSubscribe()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -199,7 +199,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestPubWithReply()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -214,7 +214,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestFlush()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -227,7 +227,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestQueueSubscriber()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s1 = c.SubscribeSync("foo", "bar"),
                                          s2 = c.SubscribeSync("foo", "bar"))
@@ -276,7 +276,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestReplyArg()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -311,7 +311,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestSyncReplyArg()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -331,7 +331,7 @@ namespace NATSUnitTests
             int count = 0;
             int max = 20;
 
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -379,7 +379,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestDoubleUnsubscribe()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -402,7 +402,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestRequestTimeout()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 try
                 {
@@ -419,7 +419,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestRequest()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -447,7 +447,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestRequestNoBody()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -473,7 +473,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestFlushInHandler()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -511,7 +511,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestReleaseFlush()
         {
-            IConnection c = new ConnectionFactory().Connect();
+            IConnection c = new ConnectionFactory().CreateConnection();
 
             for (int i = 0; i < 1000; i++)
             {
@@ -525,7 +525,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestCloseAndDispose()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 c.Close();
             }
@@ -534,7 +534,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestInbox()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 string inbox = c.NewInbox();
                 Assert.IsFalse(string.IsNullOrWhiteSpace(inbox));
@@ -545,7 +545,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestStats()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 byte[] data = Encoding.UTF8.GetBytes("The quick brown fox jumped over the lazy dog");
                 int iter = 10;
@@ -554,7 +554,7 @@ namespace NATSUnitTests
                 {
                     c.Publish("foo", data);
                 }
-                c.Flush(100000);
+                c.Flush(1000);
 
                 IStatistics stats = c.Stats;
                 Assert.AreEqual(iter, stats.OutMsgs);
@@ -573,7 +573,7 @@ namespace NATSUnitTests
                 {
                     c.Publish("foo", data);
                 }
-                c.Flush(100000);
+                c.Flush(1000);
 
                 stats = c.Stats;
                 Assert.AreEqual(2 * iter, stats.InMsgs);
@@ -584,7 +584,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestRaceSafeStats()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
 
                 new Task(() => { c.Publish("foo", null); }).Start();
@@ -598,7 +598,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestBadSubject()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 new Task(() => { c.Publish("foo", null); }).Start();
                 Thread.Sleep(200);
@@ -610,7 +610,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestLargeMessage()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 int msgSize = 20480;
                 byte[] msg = new byte[msgSize];
@@ -628,6 +628,7 @@ namespace NATSUnitTests
                 }
             }
         }
+
 
     } // class
 

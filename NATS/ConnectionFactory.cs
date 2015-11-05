@@ -19,16 +19,16 @@ namespace NATS.Client
         public ConnectionFactory() { }
 
         /// <summary>
-        /// Connect will attempt to connect to the NATS server.
+        /// CreateConnection will attempt to connect to the NATS server.
         /// The url can contain username/password semantics.
         /// </summary>
         /// <param name="url">The url</param>
         /// <returns>A new connection to the NATS server</returns>
-        public IConnection Connect(string url)
+        public IConnection CreateConnection(string url)
         {
             Options opts = new Options();
             opts.Url = url;
-            return Connect(opts);
+            return CreateConnection(opts);
         }
 
         /// <summary>
@@ -40,34 +40,34 @@ namespace NATS.Client
         }
 
         /// <summary>
-        /// SecureConnect will attempt to connect to the NATS server using TLS.
+        /// CreateSecureConnection will attempt to connect to the NATS server using TLS.
         /// The url can contain username/password semantics.
         /// </summary>
         /// <param name="url">connect url</param>
         /// <returns>A new connection to the NATS server</returns>
-        public IConnection SecureConnect(string url)
+        public IConnection CreateSecureConnection(string url)
         {
             Options opts = new Options();
             opts.Url = url;
             opts.Secure = true;
-            return Connect(opts);
+            return CreateConnection(opts);
         }
 
         /// <summary>
-        /// Connect to the NATs server using default options.
+        /// Create a connection to the NATs server using default options.
         /// </summary>
         /// <returns>A new connection to the NATS server</returns>
-        public IConnection Connect()
+        public IConnection CreateConnection()
         {
-            return Connect(new Options());
+            return CreateConnection(new Options());
         }
 
         /// <summary>
-        /// Connect to the NATs server using the provided options.
+        /// CreateConnection to the NATs server using the provided options.
         /// </summary>
         /// <param name="opts">NATs client options</param>
         /// <returns>A new connection to the NATS server</returns>
-        public IConnection Connect(Options opts)
+        public IConnection CreateConnection(Options opts)
         {
             Connection nc = new Connection(opts);
             nc.connect();

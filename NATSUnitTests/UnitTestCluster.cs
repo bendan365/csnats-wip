@@ -42,19 +42,19 @@ namespace NATSUnitTests
             o.NoRandomize = true;
 
             UnitTestUtilities.testExpectedException(
-                () => { cf.Connect(); },
+                () => { cf.CreateConnection(); },
                 typeof(NATSNoServersException));
 
             o.Servers = testServers;
 
             UnitTestUtilities.testExpectedException(
-                () => { cf.Connect(o); },
+                () => { cf.CreateConnection(o); },
                 typeof(NATSNoServersException));
 
             // Make sure we can connect to first server if running
             using (NATSServer ns = utils.CreateServerOnPort(1222))
             {
-                c = cf.Connect(o);
+                c = cf.CreateConnection(o);
                 Assert.IsTrue(testServers[0].Equals(c.ConnectedUrl));
                 c.Close();
             }
@@ -62,7 +62,7 @@ namespace NATSUnitTests
             // make sure we can connect to a non-first server.
             using (NATSServer ns = utils.CreateServerOnPort(1227))
             {
-                c = cf.Connect(o);
+                c = cf.CreateConnection(o);
                 Assert.IsTrue(testServers[5].Equals(c.ConnectedUrl));
                 c.Close();
             }
@@ -71,7 +71,6 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestAuthServers()
         {
-            /// TODO - retest after synchronous connect code complete.
             string[] plainServers = new string[] {
                 "nats://localhost:1222",
 		        "nats://localhost:1224"
@@ -86,7 +85,7 @@ namespace NATSUnitTests
                               as2 = utils.CreateServerWithConfig("auth_1224.conf"))
             {
                 UnitTestUtilities.testExpectedException(
-                    () => { new ConnectionFactory().Connect(opts); },
+                    () => { new ConnectionFactory().CreateConnection(opts); },
                     typeof(NATSException));
 
                 // Test that we can connect to a subsequent correct server.
@@ -96,7 +95,7 @@ namespace NATSUnitTests
 
                 opts.Servers = authServers;
 
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     Assert.IsTrue(c.ConnectedUrl.Equals(authServers[1]));
                 }
@@ -106,7 +105,6 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestBasicClusterReconnect()
         {
-            /// TODO - retest after synchronous connect code complete.
             string[] plainServers = new string[] {
                 "nats://localhost:1222",
 		        "nats://localhost:1224"
@@ -145,7 +143,7 @@ namespace NATSUnitTests
             using (NATSServer s1 = utils.CreateServerOnPort(1222),
                               s2 = utils.CreateServerOnPort(1224))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     Stopwatch reconnectSw = new Stopwatch();
 
@@ -203,7 +201,7 @@ namespace NATSUnitTests
             {
                 Options opts = ConnectionFactory.GetDefaultOptions();
                 opts.Servers = servers;
-                c = new ConnectionFactory().Connect(opts);
+                c = new ConnectionFactory().CreateConnection(opts);
                 opts.ReconnectedEventHandler = (sender, args) =>
                 {
                     lock (mu)
@@ -303,7 +301,7 @@ namespace NATSUnitTests
 
             using (NATSServer s1 = utils.CreateServerOnPort(1222))
             {
-                IConnection c = new ConnectionFactory().Connect(opts);
+                IConnection c = new ConnectionFactory().CreateConnection(opts);
 
                 lock (mu)
                 {
@@ -361,7 +359,7 @@ namespace NATSUnitTests
 
             using (NATSServer s1 = utils.CreateServerOnPort(1222))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     s1.Shutdown();
 
@@ -419,7 +417,7 @@ namespace NATSUnitTests
 
             using (NATSServer s1 = utils.CreateServerOnPort(1222))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     s1.Shutdown();
 
@@ -488,7 +486,7 @@ namespace NATSUnitTests
 
             using (NATSServer s1 = utils.CreateServerOnPort(1222))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     s1.Shutdown();
                     for (int i = 0; i < RECONNECTS; i++)

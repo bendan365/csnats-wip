@@ -34,7 +34,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestServerAutoUnsub()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 long received = 0;
                 int max = 10;
@@ -71,7 +71,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestClientAutoUnsub()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 long received = 0;
                 int max = 10;
@@ -107,7 +107,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestCloseSubRelease()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -130,7 +130,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestValidSubscriber()
         {
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -157,7 +157,7 @@ namespace NATSUnitTests
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.SubChannelLength = 10;
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 using (ISyncSubscription s = c.SubscribeSync("foo"))
                 {
@@ -198,7 +198,7 @@ namespace NATSUnitTests
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.SubChannelLength = 10;
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {
@@ -267,7 +267,7 @@ namespace NATSUnitTests
 
             bool handledError = false;
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 using (s = c.SubscribeAsync("foo"))
                 {
@@ -302,7 +302,7 @@ namespace NATSUnitTests
                                 return;
 
                             Console.WriteLine("Subscriber Waiting....");
-                            Assert.IsTrue(Monitor.Wait(subLock, 30000));
+                            Assert.IsTrue(Monitor.Wait(subLock, 10000));
                             Console.WriteLine("Subscriber done.");
                             blockedOnSubscriber = true;
                         }
@@ -319,7 +319,7 @@ namespace NATSUnitTests
                         }
                         c.Flush();
 
-                        Assert.IsTrue(Monitor.Wait(testLock, 10000));
+                        Assert.IsTrue(Monitor.Wait(testLock, 1000));
                     }
                 }
             }
@@ -330,7 +330,7 @@ namespace NATSUnitTests
         {
             Object waitCond = new Object();
 
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription helper = c.SubscribeAsync("helper"),
                                           start = c.SubscribeAsync("start"))
@@ -382,7 +382,7 @@ namespace NATSUnitTests
             Object waitCond = new Object();
             int callbacks = 0;
 
-            using (IConnection c = new ConnectionFactory().Connect())
+            using (IConnection c = new ConnectionFactory().CreateConnection())
             {
                 using (IAsyncSubscription s = c.SubscribeAsync("foo"))
                 {

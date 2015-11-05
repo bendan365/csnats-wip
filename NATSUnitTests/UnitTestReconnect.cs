@@ -63,7 +63,7 @@ namespace NATSUnitTests
 
             using (NATSServer ns = utils.CreateServerOnPort(22222))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     lock (testLock)
                     {
@@ -94,7 +94,7 @@ namespace NATSUnitTests
 
             using (NATSServer ns = utils.CreateServerOnPort(22222))
             {
-                using (IConnection c = new ConnectionFactory().Connect(opts))
+                using (IConnection c = new ConnectionFactory().CreateConnection(opts))
                 {
                     lock (testLock)
                     {
@@ -134,7 +134,7 @@ namespace NATSUnitTests
 
             NATSServer ns = utils.CreateServerOnPort(22222);
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 IAsyncSubscription s = c.SubscribeAsync("foo");
                 s.MessageHandler += (sender, args) =>
@@ -204,7 +204,7 @@ namespace NATSUnitTests
             byte[] payload = Encoding.UTF8.GetBytes("bar");
             NATSServer ns = utils.CreateServerOnPort(22222);
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 IAsyncSubscription s1 = c.SubscribeAsync("foo");
                 IAsyncSubscription s2 = c.SubscribeAsync("foobar");
@@ -395,7 +395,7 @@ func TestQueueSubsOnReconnect(t *testing.T) {
 
             using (NATSServer s1 = utils.CreateServerOnPort(22222))
             {
-                IConnection c = new ConnectionFactory().Connect(opts);
+                IConnection c = new ConnectionFactory().CreateConnection(opts);
                 Assert.IsFalse(c.IsClosed());
                 
                 s1.Shutdown();

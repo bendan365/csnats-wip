@@ -32,7 +32,7 @@ namespace NATSExamples
 
             replyMsg.Data = Encoding.UTF8.GetBytes("reply"); 
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 TimeSpan elapsed;
 

@@ -31,7 +31,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestConnectionStatus()
         {
-            IConnection c = new ConnectionFactory().Connect();
+            IConnection c = new ConnectionFactory().CreateConnection();
             Assert.AreEqual(ConnState.CONNECTED, c.State);
             c.Close();
             Assert.AreEqual(ConnState.CLOSED, c.State);
@@ -44,13 +44,13 @@ namespace NATSUnitTests
 
             Options o = ConnectionFactory.GetDefaultOptions();
             o.ClosedEventHandler += (sender, args) => { closed = true; };
-            IConnection c = new ConnectionFactory().Connect(o);
+            IConnection c = new ConnectionFactory().CreateConnection(o);
             c.Close();
             Assert.IsTrue(closed);
 
             // now test using.
             closed = false;
-            using (c = new ConnectionFactory().Connect(o)) { };
+            using (c = new ConnectionFactory().CreateConnection(o)) { };
             Assert.IsTrue(closed);
         }
 
@@ -70,7 +70,7 @@ namespace NATSUnitTests
                 }
             };
 
-            IConnection c = new ConnectionFactory().Connect(o);
+            IConnection c = new ConnectionFactory().CreateConnection(o);
             lock (mu)
             {
                 c.Close();
@@ -82,7 +82,7 @@ namespace NATSUnitTests
             disconnected = false;
             lock (mu)
             {
-                using (c = new ConnectionFactory().Connect(o)) { };
+                using (c = new ConnectionFactory().CreateConnection(o)) { };
                 Monitor.Wait(mu);
             }
             Assert.IsTrue(disconnected);
@@ -105,7 +105,7 @@ namespace NATSUnitTests
                 }
             };
 
-            IConnection c = new ConnectionFactory().Connect(o);
+            IConnection c = new ConnectionFactory().CreateConnection(o);
             lock (mu)
             {
                 utils.bounceDefaultServer(1000);
@@ -118,7 +118,7 @@ namespace NATSUnitTests
         [TestMethod]
         public void TestClosedConnections()
         {
-            IConnection c = new ConnectionFactory().Connect();
+            IConnection c = new ConnectionFactory().CreateConnection();
             ISyncSubscription s = c.SubscribeSync("foo");
 
             c.Close();

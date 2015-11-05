@@ -29,7 +29,7 @@ namespace NATSExamples
             Options opts = ConnectionFactory.GetDefaultOptions();
             opts.Url = url;
 
-            using (IConnection c = new ConnectionFactory().Connect(opts))
+            using (IConnection c = new ConnectionFactory().CreateConnection(opts))
             {
                 TimeSpan elapsed;
 

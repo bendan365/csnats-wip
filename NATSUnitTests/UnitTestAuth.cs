@@ -26,7 +26,7 @@ namespace NATSUnitTests
                 Options opts = ConnectionFactory.GetDefaultOptions();
                 opts.Url = url;
                 opts.DisconnectedEventHandler += handleDisconnect;
-                IConnection c = new ConnectionFactory().Connect(url);
+                IConnection c = new ConnectionFactory().CreateConnection(url);
 
                 Assert.Fail("Expected a failure; did not receive one");
                 
@@ -60,7 +60,7 @@ namespace NATSUnitTests
         {
             using (NATSServer s = util.CreateServerWithConfig("auth_1222.conf"))
             {
-                IConnection c = new ConnectionFactory().Connect("nats://username:password@localhost:1222");
+                IConnection c = new ConnectionFactory().CreateConnection("nats://username:password@localhost:1222");
                 c.Close();
             }
         }
