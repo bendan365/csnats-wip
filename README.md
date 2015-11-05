@@ -141,7 +141,7 @@ c.Close();
 
 ## Advanced Usage
 
-The Connection and Subscriber interfaces implement IDisposable, allowing a developer to use them in a using statement.  Here all the code required to connect to a default server, receives and print ten messages, cleaning up when it's done.
+Connection and Subscriber objects implement IDisposable and can be created in a using statement.  Here is all the code required to connect to a default server, receive ten messages, and clean up, unsubcribing and closing the connection when finished.
 
 ```C#
             using (IConnection c = new ConnectionFactory().Connect())
@@ -169,7 +169,8 @@ Or to publish ten messages:
             }
 ```
 
-Flush a connection to the server - this return when all messages have been processed.  Optionally, a timeout in milliseconds can be specified.
+Flush a connection to the server - this call returns when all messages have been processed.  Optionally, a timeout in milliseconds can be passed.
+
 ```C#
 c.Flush();
 
