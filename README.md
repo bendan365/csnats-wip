@@ -12,25 +12,30 @@ First, download the source code:
 ```
 git clone git@github.com:nats-io/csnats.git .
 ```
+
+### Quick Start
+
 Ensure you have installed the .NET Framework 4.0 or greater.  Set your path to include csc.exe, e.g.
 ```
 set PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319;%PATH%
 ```
-Then, build the assembly.  There are two ways to do this.  To quickly get started, there is a simple batch file to build, requiring only the .NET framework SDK to be installed.
+Then, build the assembly.  There is a simple batch file to build, requiring only the .NET framework SDK to be installed.
 
 ```
 build.bat
 ```
-The "quick start" batch file will create a bin directory, and copy all binary files, including samples, into it.
+The batch file will create a bin directory, and copy all binary files, including samples, into it.
+
+### Visual Studio
 
 The recommended alternative is to load NATS.sln into Visual Studio 2013 Express or better.  Later versions of Visual Studio should automatically upgrade the solution and project files for you.  XML documenation is generated, so code completion, context help, etc, will be available in the editor.
 
-### Project files
+#### Project files
 
 The NATS Visual Studio Solution contains several projects, listed below.
 
 * NATS - The NATS.Client assembly
-* NATSUnitTests - Visual Studio Unit Tests
+* NATSUnitTests - Visual Studio Unit Tests (ensure you have gnatds.exe in your path for these).
 * Publish Subscribe
   * Publish - A sample publisher.
   * Subscribe - A sample subscriber.
@@ -48,22 +53,22 @@ NATS .NET uses interfaces to reference most NATS client objects, and delegates f
 
 The steps to create a NATS application are:
 
-1)  First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
+First, reference the NATS.Client assembly so you can use it in your code.  Be sure to add a reference in your project or if compiling via command line, compile with the /r:NATS.Client.DLL parameter.
 ```C#
 using NATS.Client;
 ```
 
-2) Create a connection factory
+Next create a connection factory
 ```C#
 ConnectionFactory cf = new ConnectionFactory();
 ```
 
-3) Setup your options by modifying a default set obtained from the factory.
+One can setup options by modifying a default set obtained from the factory.
 ```C#
 Options opts = ConnectionFactory.GetDefaultOptions();
 ```
 
-4) Create a connection.
+Create a connection.
 ```C#
 IConnection c = cf.Connect(opts);
 ```
@@ -115,6 +120,7 @@ Queue groups are created by creating a synchronous or asychronous subsciption us
 ```C#
 ISyncSubscription s1 = c.SubscribeSync("foo", "group");
 ```
+
 or
 
 ```C#
@@ -151,78 +157,93 @@ The Connection and Subscriber interfaces implement IDisposable, allowing a devel
             }
 ```
 
-Or to 
+Or to publish ten messages:
 
-```go
-
-// Flush connection to server, returns when all messages have been processed.
-nc.Flush()
-fmt.Println("All clear!")
-
-// FlushTimeout specifies a timeout value as well.
-err := nc.FlushTimeout(1*time.Second)
-if err != nil {
-    fmt.Println("All clear!")
-} else {
-    fmt.Println("Flushed timed out!")
-}
-
-// Auto-unsubscribe after MAX_WANTED messages received
-const MAX_WANTED = 10
-sub, err := nc.Subscribe("foo")
-sub.AutoUnsubscribe(MAX_WANTED)
-
-// Multiple connections
-nc1 := nats.Connect("nats://host1:4222")
-nc2 := nats.Connect("nats://host2:4222")
-
-nc1.Subscribe("foo", func(m *Msg) {
-    fmt.Printf("Received a message: %s\n", string(m.Data))
-})
-
-nc2.Publish("foo", []byte("Hello World!"));
-
+```C#
+            using (IConnection c = new ConnectionFactory().Connect())
+            {
+                for (int i = 0; i < 10; i++)
+                {
+                    c.Publish("foo", Encoding.UTF8.GetBytes("hello"));
+                }
+            }
 ```
+
+Flush a connection to the server - this return when all messages have been processed.  Optionally, a timeout in milliseconds can be specified.
+```C#
+c.Flush();
+
+c.Flush(1000);
+```
+
+Setup a subscriber to auto-unsubscribe after ten messsages.
+```C#
+        IAsyncSubscription s = c.SubscribeAsync("foo");
+        s.MessageHandler += (sender, args) =>
+        {
+           Console.WriteLine("Received: " + args.Message);
+        };
+                
+        s.Start();
+        s.AutoUnsubscribe(10);
+```
+
+Note that an anonymous function was used.  This is for brevity here - in practice, delegate functions can be used as well.  
+
+Other events can be assigned delegate methods through the options object.
+```C#
+            Options opts = ConnectionFactory.GetDefaultOptions();
+
+            opts.AsyncErrorEventHandler += (sender, args) =>
+            {
+                Console.WriteLine("Error: ");
+                Console.WriteLine("   Server: " + args.Conn.ConnectedUrl);
+                Console.WriteLine("   Message: " + args.Error);
+                Console.WriteLine("   Subject: " + args.Subscription.Subject);
+            };
+
+            opts.ClosedEventHandler += (sender, args) =>
+            {
+                Console.WriteLine("Connection Closed: ");
+                Console.WriteLine("   Server: " + args.Conn.ConnectedUrl);
+            };
+
+            opts.DisconnectedEventHandler += (sender, args) =>
+            {
+                Console.WriteLine("Connection Disconnected: ");
+                Console.WriteLine("   Server: " + args.Conn.ConnectedUrl);
+            };
+
+            IConnection c = new ConnectionFactory().Connect(opts);
+```
+
+
 
 ## Clustered Usage
 
-```go
+```C#
+            string[] servers = new string[] {
+                "nats://localhost:1222",
+		"nats://localhost:1224"
+            };
 
-var servers = []string{
-	"nats://localhost:1222",
-	"nats://localhost:1223",
-	"nats://localhost:1224",
-}
-
-// Setup options to include all servers in the cluster
-opts := nats.DefaultOptions
-opts.Servers = servers
-
-// Optionally set ReconnectWait and MaxReconnect attempts.
-// This example means 10 seconds total per backend.
-opts.MaxReconnect = 5
-opts.ReconnectWait = (2 * time.Second)
-
-// Optionally disable randomization of the server pool
-opts.NoRandomize = true
-
-nc, err := opts.Connect()
-
-// Setup callbacks to be notified on disconnects and reconnects
-nc.Opts.DisconnectedCB = func(_ *Conn) {
-    fmt.Printf("Got disconnected!\n")
-}
-
-// See who we are connected to on reconnect.
-nc.Opts.ReconnectedCB = func(nc *Conn) {
-    fmt.Printf("Got reconnected to %v!\n", nc.ConnectedUrl())
-}
-
+            Options opts = ConnectionFactory.GetDefaultOptions();
+            opts.MaxReconnect = 2;
+            opts.ReconnectWait = 1000;
+            opts.NoRandomize = true;
+            opts.Servers = servers;
+            
+            IConnection c = new ConnectionFactory().Connect(opts);
 ```
 
 Known Issues
 * There can be an issue with a flush hanging in some situtions.  I'm looking into it.
 * Some unit tests are failing due to long connect times due to the underlying .NET TCPClient API.
+
+TODO
+* API documentation
+* WCF bindings
+* Strong name the assembly
 
 
 ## License
