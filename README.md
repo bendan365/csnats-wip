@@ -1,5 +1,5 @@
 
-# NATS - C# Client
+# NATS - .NET C# Client
 A [C# .NET](https://msdn.microsoft.com/en-us/vstudio/aa496123.aspx) client for the [NATS messaging system](https://nats.io).
 
 This is an alpha release, based on the [NATS GO Client](https://github.com/nats-io/nats).
