@@ -132,9 +132,8 @@ To unsubscribe, call the ISubscriber Unsubscribe method:
 s.Unsubscribe();
 ```
 
-When finished with NATS, clean up and free resources.
+When finished with NATS, close the connection.
 ```C#
-s.Close();
 c.Close();
 ```
 
@@ -178,6 +177,7 @@ c.Flush(1000);
 ```
 
 Setup a subscriber to auto-unsubscribe after ten messsages.
+
 ```C#
         IAsyncSubscription s = c.SubscribeAsync("foo");
         s.MessageHandler += (sender, args) =>
