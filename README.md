@@ -135,7 +135,23 @@ c.Close();
 
 ## Advanced Usage
 
-The Connection and Subscriber interfaces implement IDisposable, allowing one to use them in a using statement.  Here is a simple application that receives and prints
+The Connection and Subscriber interfaces implement IDisposable, allowing a developer to use them in a using statement.  Here all the code required to connect to a default server, receives and print ten messages, cleaning up when it's done.
+
+```C#
+            using (IConnection c = new ConnectionFactory().Connect())
+            {
+                using (ISyncSubscription s = c.SubscribeSync("foo"))
+                {
+                    for (int i = 0; i < 10; i++)
+                    {
+                        Msg m = s.NextMessage();
+                        System.Console.WriteLine("Received: " + m);
+                    }
+                }  
+            }
+```
+
+Or to 
 
 ```go
 
@@ -206,7 +222,7 @@ nc.Opts.ReconnectedCB = func(nc *Conn) {
 
 Known Issues
 * There can be an issue with a flush hanging in some situtions.  I'm looking into it.
-* Some unit tests are failing due to long connect times in the .NET TCPClient.
+* Some unit tests are failing due to long connect times due to the underlying .NET TCPClient API.
 
 
 ## License
